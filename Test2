@@ -1,0 +1,902 @@
+local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/Puhcoder16/theme/refs/heads/main/theme'))()
+    local Window = Rayfield:CreateWindow({
+   Name = "Loc dep trai",
+   Icon = 0, -- Icon in Topbar. Can use Lucide Icons (string) or Roblox Image (number). 0 to use no icon (default).
+   LoadingTitle = "Ez",
+   LoadingSubtitle = "by Locc",
+   ShowText = "Rayfield", -- for mobile users to unhide rayfield, change if you'd like
+   Theme = "Default", -- Check https://docs.sirius.menu/rayfield/configuration/themes
+
+   ToggleUIKeybind = "M", -- The keybind to toggle the UI visibility (string like "K" or Enum.KeyCode)
+
+   DisableRayfieldPrompts = false,
+   DisableBuildWarnings = false, -- Prevents Rayfield from warning when the script has a version mismatch with the interface
+
+   ConfigurationSaving = {
+   Enabled = true,
+   FolderName = "Loccdz", -- 👈 phải để trong dấu ngoặc kép
+   FileName = "Locc Hub"
+},
+
+        
+   Discord = {
+      Enabled = false, -- Prompt the user to join your Discord server if their executor supports it
+      Invite = "noinvitelink", -- The Discord invite code, do not include discord.gg/. E.g. discord.gg/ ABCD would be ABCD
+      RememberJoins = true -- Set this to false to make them join the discord every time they load it up
+   },
+
+   KeySystem = false, -- Set this to true to use our key system
+   KeySettings = {
+      Title = "Untitled",
+      Subtitle = "Key System",
+      Note = "No method of obtaining the key is provided", -- Use this to tell the user how to get a key
+      FileName = "Key", -- It is recommended to use something unique as other scripts using Rayfield may overwrite your key file
+      SaveKey = true, -- The user's key will be saved, but if you change the key, they will be unable to use your script
+      GrabKeyFromSite = false, -- If this is true, set Key below to the RAW site you would like Rayfield to get the key from
+      Key = {"Hello"} -- List of keys that will be accepted by the system, can be RAW file links (pastebin, github etc) or simple strings ("hello","key22")
+   }
+})
+
+local Tab = Window:CreateTab("Home", nil) -- Title, Image
+local MainSection = Tab:CreateSection("Main")
+local MiscTab = Window:CreateTab("Misc", nil) -- Title, Image
+
+-- Biến toàn cục điều khiển
+_G.AutoSkill = false
+
+-- Tạo toggle Auto Skill
+local Toggle = Tab:CreateToggle({
+    Name = "Auto Skill Chain Lightning",
+    CurrentValue = false,
+    Flag = "Toggle1",
+    Callback = function(Value)
+        _G.AutoSkill = Value
+        if Value then
+            print("Đã bật Auto Skill")
+            AutoSkillFunc()
+        else
+            print("Đã tắt Auto Skill")
+        end
+    end,
+})
+
+-- Auto Skill: Chain Lightning (chờ combo hoàn tất trước khi bắt đầu)
+function AutoSkillFunc()
+    task.spawn(function()
+        -- Nếu biến _G.ComboDone chưa được định nghĩa (không dùng combo), mặc định cho true
+        if _G.ComboDone == nil then _G.ComboDone = true end
+
+        -- Chờ combo hoàn tất trước khi bắt đầu (nếu combo đang chạy)
+        repeat task.wait() until _G.ComboDone == true
+
+        -- Bắt đầu loop sử dụng skill khi _G.AutoSkill = true
+        while _G.AutoSkill do
+            task.wait(0)
+            local ok, err = pcall(function()
+                local args = { [1] = "EBD5165C-DB2C-4A41-A43C-7EC83AEB89E9" }
+                local player = game:GetService("Players").LocalPlayer
+                local skill = (player and player:FindFirstChild("Backpack") and player.Backpack:FindFirstChild("Chain Lightning")) 
+                              or (player.Character and player.Character:FindFirstChild("Chain Lightning"))
+                if skill and skill:FindFirstChild("abilityEvent") then
+                    skill.abilityEvent:FireServer(unpack(args))
+                end
+            end)
+            if not ok then
+                warn("[AutoSkill] pcall error:", err)
+                task.wait(0.5)
+            end
+        end
+    end)
+end
+
+
+-- Biến điều khiển AutoLift
+_G.Autolift = false
+local running = false
+
+-- Auto Heal: Chain Heal (chờ combo hoàn tất trước khi bắt đầu)
+local function AutoLiftFunc()
+    if running then return end -- tránh chạy trùng
+    running = true
+    task.spawn(function()
+        -- Nếu biến _G.ComboDone chưa được định nghĩa (không dùng combo), mặc định cho true
+        if _G.ComboDone == nil then _G.ComboDone = true end
+
+        -- Chờ combo hoàn tất trước khi bắt đầu (nếu combo đang chạy)
+        repeat task.wait() until _G.ComboDone == true
+
+        while _G.Autolift do
+            task.wait(0)
+            local ok, err = pcall(function()
+                local args = { [1] = "852E0487-29F7-4293-AD32-9F02DD884A51" }
+                local player = game:GetService("Players").LocalPlayer
+                local skill = (player and player:FindFirstChild("Backpack") and player.Backpack:FindFirstChild("Chain Heal"))
+                              or (player.Character and player.Character:FindFirstChild("Chain Heal"))
+                if skill and skill:FindFirstChild("spellEvent") then
+                    skill.spellEvent:FireServer(unpack(args))
+                end
+            end)
+            if not ok then
+                warn("[AutoHeal] pcall error:", err)
+                task.wait(0.5)
+            end
+        end
+
+        running = false
+    end)
+end
+
+
+-- Tạo Toggle trên GUI
+local Toggle = Tab:CreateToggle({
+    Name = "Auto Heal (Chain Heal)",
+    CurrentValue = false,      -- mặc định tắt
+    Flag = "Toggle_AutoHeal",  -- Flag duy nhất để lưu
+    Callback = function(Value)
+        _G.Autolift = Value
+        if Value then
+            print("✅ Auto Heal ĐÃ BẬT")
+            AutoLiftFunc()
+        else
+            print("⛔ Auto Heal ĐÃ TẮT")
+        end
+    end,
+})
+
+-- ========= Auto Combo (1 lần) + Toggle (lưu config) =========
+-- Chèn sau Auto Heal toggle, trước Auto Farm
+
+-- đảm bảo biến toàn cục tồn tại
+_G.ComboDone = _G.ComboDone or true
+_G.ComboRunning = _G.ComboRunning or false
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+
+-- an toàn: swap set
+local function swapSet(setName)
+    local args = {
+        [1] = {
+            [1] = { ["\3"] = "swapAbilitySet" },
+            [2] = setName
+        }
+    }
+    if ReplicatedStorage:FindFirstChild("dataRemoteEvent") and type(ReplicatedStorage.dataRemoteEvent.FireServer) == "function" then
+        pcall(function()
+            ReplicatedStorage.dataRemoteEvent:FireServer(unpack(args))
+        end)
+    end
+end
+
+-- an toàn: dùng skill (tìm trong Backpack hoặc Character)
+local function useSkill(skillName, skillID)
+    if not player then return false end
+
+    local function findInst(name)
+        if player:FindFirstChild("Backpack") then
+            local s = player.Backpack:FindFirstChild(name)
+            if s then return s end
+        end
+        if player.Character then
+            local s2 = player.Character:FindFirstChild(name)
+            if s2 then return s2 end
+        end
+        -- fallback: tìm theo descendants (nếu tên nằm sâu)
+        if player:FindFirstChild("Backpack") then
+            for _,v in ipairs(player.Backpack:GetDescendants()) do
+                if v.Name == name then return v end
+            end
+        end
+        if player.Character then
+            for _,v in ipairs(player.Character:GetDescendants()) do
+                if v.Name == name then return v end
+            end
+        end
+        return nil
+    end
+
+    local inst = findInst(skillName)
+    if not inst then return false end
+
+    local ev = inst:FindFirstChild("abilityEvent") or inst:FindFirstChild("spellEvent")
+    if ev and type(ev.FireServer) == "function" then
+        pcall(function() ev:FireServer(skillID) end)
+        return true
+    end
+
+    -- nếu instance bản thân có FireServer (hiếm)
+    if type(inst.FireServer) == "function" then
+        pcall(function() inst:FireServer(skillID) end)
+        return true
+    end
+
+    return false
+end
+
+-- chạy combo 1 lần, đặt _G.ComboDone = true chỉ khi hoàn tất thật sự
+local function RunComboOnce()
+    if _G.ComboRunning then return end
+    _G.ComboRunning = true
+    _G.ComboDone = false -- khoá các script khác
+
+    task.spawn(function()
+        local setM, setN = "M", "N"
+
+        -- 1) đổi sang M
+        swapSet(setM)
+        task.wait(0.4) -- đợi swap server sync
+
+        -- 2) dùng Inner Focus
+        local ok1 = useSkill("Inner Focus", "6D6A8BC4-B85F-4A20-B626-8AF8EF44DB9D")
+        if not ok1 then warn("[AutoCombo] Không tìm thấy hoặc không thể dùng Inner Focus") end
+
+        -- 3) chờ 1s -> dùng Innervate
+        task.wait(1)
+        local ok2 = useSkill("Innervate", "87C934DD-13DE-4DD2-A8BC-B3DA8C470515")
+        if not ok2 then warn("[AutoCombo] Không tìm thấy hoặc không thể dùng Innervate") end
+
+        -- 4) chờ 1s -> swap set M 1 lần nữa
+        task.wait(1)
+        swapSet(setM)
+        task.wait(0.5)
+
+        -- 5) swap về set N (ban đầu)
+        swapSet(setN)
+        task.wait(0.2)
+
+        -- hoàn tất
+        _G.ComboDone = true
+        _G.ComboRunning = false
+
+        if Rayfield and type(Rayfield.Notify) == "function" then
+            pcall(function()
+                Rayfield:Notify({
+                    Title = "Auto Combo",
+                    Content = "Combo hoàn tất — scripts khác sẽ bắt đầu.",
+                    Duration = 3
+                })
+            end)
+        else
+            print("[AutoCombo] Combo hoàn tất")
+        end
+    end)
+end
+
+-- Toggle (lưu config bằng Flag)
+local AutoComboToggle = Tab:CreateToggle({
+    Name = "Auto Combo 1 Lần (Save Config)",
+    CurrentValue = false,
+    Flag = "AutoComboOnce",
+    Callback = function(Value)
+        if Value then
+            -- khi bật toggle: chạy 1 lần
+            RunComboOnce()
+        end
+    end,
+})
+
+-- Khi load script nếu Flag đã bật (được lưu) -> tự chạy 1 lần
+task.defer(function()
+    task.wait(1)
+    if Rayfield and Rayfield.Flags and Rayfield.Flags.AutoComboOnce and Rayfield.Flags.AutoComboOnce.CurrentValue == true then
+        -- nếu combo chưa chạy thì chạy 1 lần
+        if not _G.ComboRunning and _G.ComboDone ~= true then
+            RunComboOnce()
+        elseif not _G.ComboRunning and _G.ComboDone == true then
+            -- nếu ComboDone đã true (không cần chạy), đảm bảo combo trạng thái OK
+        else
+            -- đang chạy, đợi xong
+        end
+    end
+end)
+-- ========= END =========
+
+
+
+
+--// 🌊 Auto Farm Hover Tween - Smooth Version (No Jitter)
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- ⚙️ Cấu hình
+local tweenSpeed = 30
+local hoverHeight = 18
+local maxRange = 4000
+local teleportDistance = 30
+local teleportDelay = 1.5
+_G.AutoTween = false
+
+-- 🧠 Hàm tìm Humanoid + Root
+local function getHumanoidAndRoot(model)
+	if not model then return end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	local root = model:FindFirstChild("HumanoidRootPart")
+	return hum, root
+end
+
+-- 🔍 Tìm NPC gần nhất
+local function getNearestNPC()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local _, root = getHumanoidAndRoot(char)
+	if not root then return end
+
+	local nearest, shortest = nil, math.huge
+	for _, v in ipairs(workspace:GetDescendants()) do
+		if v:IsA("Model") and v ~= char then
+			local hum, hrp = getHumanoidAndRoot(v)
+			if hum and hrp and hum.Health > 0 then
+				local dist = (hrp.Position - root.Position).Magnitude
+				if dist < shortest and dist < maxRange then
+					shortest = dist
+					nearest = v
+				end
+			end
+		end
+	end
+	return nearest
+end
+
+-- 🧭 Di chuyển mượt (FakeRoot Tween)
+local function tweenTo(target)
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum, root = getHumanoidAndRoot(char)
+	if not root then return end
+	if not target then return end
+
+	local _, targetRoot = getHumanoidAndRoot(target)
+	if not targetRoot then return end
+
+	-- Tạo part giả làm điểm tween
+	local fakeRoot = Instance.new("Part")
+	fakeRoot.Anchored = true
+	fakeRoot.CanCollide = false
+	fakeRoot.Transparency = 1
+	fakeRoot.CFrame = root.CFrame
+	fakeRoot.Parent = workspace
+
+	-- Nếu quá xa → chờ và teleport nhẹ tới gần
+	local distance = (root.Position - targetRoot.Position).Magnitude
+	if distance > teleportDistance then
+		task.wait(teleportDelay)
+		local direction = (targetRoot.Position - root.Position).Unit
+		local safePos = targetRoot.Position - direction * teleportDistance
+		root.CFrame = CFrame.new(safePos + Vector3.new(0, hoverHeight, 0))
+		fakeRoot.CFrame = root.CFrame
+	end
+
+	-- Tween fake root tới đầu NPC
+	local targetPos = targetRoot.Position + Vector3.new(0, hoverHeight, 0)
+	local duration = math.clamp(distance / tweenSpeed, 0.2, 3)
+	local goal = { CFrame = CFrame.new(targetPos) }
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
+	tween:Play()
+
+	-- Trong khi tween fakeRoot → đặt nhân vật theo fakeRoot
+	task.spawn(function()
+		while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
+			root.CFrame = fakeRoot.CFrame
+			root.Velocity = Vector3.zero
+			task.wait()
+		end
+	end)
+
+	tween.Completed:Wait()
+	fakeRoot:Destroy()
+end
+
+-- 🔁 Auto Farm Loop
+task.spawn(function()
+	repeat task.wait() until _G.ComboDone == true  -- ⏳ Đợi Auto Combo hoàn tất trước khi farm
+
+	while task.wait(0.5) do
+		if _G.AutoTween then
+			local npc = getNearestNPC()
+			if npc then
+				tweenTo(npc)
+			end
+		end
+	end
+end)
+
+-- 🪄 Toggle GUI
+local Toggle = Tab:CreateToggle({
+	Name = "Auto Farm",
+	CurrentValue = false,
+	Flag = "ToggleAutoFarm",
+	Callback = function(Value)
+		_G.AutoTween = Value
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum, root = getHumanoidAndRoot(char)
+		if not hum or not root then return end
+
+		if Value then
+			hum.PlatformStand = true
+			hum:ChangeState(Enum.HumanoidStateType.Physics)
+			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover ổn định (no jitter).")
+		else
+			hum.PlatformStand = false
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			warn("[AUTO-FARM] ⛔ Đã tắt.")
+		end
+	end
+})
+
+
+local Toggle = MiscTab:CreateToggle({
+	Name = "Auto Start",
+	CurrentValue = false,
+	Flag = "Toggle_AutoStart",
+	Callback = function(Value)
+		_G.AutoStart = Value
+
+		if _G.AutoStart then
+			warn("✅ Auto Start ĐÃ BẬT")
+
+			-- 🔁 Chạy liên tục cho đến khi tắt
+			task.spawn(function()
+            repeat task.wait() until _G.ComboDone == true
+
+				while _G.AutoStart do
+					-- ⚡ Gửi lệnh start
+					game:GetService("ReplicatedStorage").remotes.changeStartValue:FireServer()
+					warn("🔁 Auto Start đang thực thi...")
+
+					-- ⏱ Chờ 1–2 giây để tránh spam server
+					task.wait(2)
+				end
+				warn("⛔ Auto Start ĐÃ DỪNG")
+			end)
+
+		else
+			warn("⛔ Auto Start ĐÃ TẮT THỦ CÔNG")
+		end
+	end,
+})
+
+
+local Toggle = MiscTab:CreateToggle({
+	Name = "Auto Retry",
+	CurrentValue = false,
+	Flag = "Toggle_AutoRetry",
+	Callback = function(Value)
+		_G.AutoRetry = Value
+
+		if _G.AutoRetry then
+			warn("✅ Auto Retry ĐÃ BẬT")
+
+			-- 🔁 Chạy liên tục cho đến khi tắt
+			task.spawn(function()
+				while _G.AutoRetry do
+					-- ⚡ Gửi lệnh retry
+					local args = {
+                        [1] = {
+                            [1] = {
+                                ["\3"] = "vote",
+                                ["vote"] = true
+                            },
+                            [2] = "-"
+                        }
+                    }
+
+                    game:GetService("ReplicatedStorage").dataRemoteEvent:FireServer(unpack(args))
+					warn("🔁 Auto Retry đang thực thi...")
+
+					-- ⏱ Chờ 1–2 giây để tránh spam server
+					task.wait(2)
+				end
+				warn("⛔ Auto Retry ĐÃ DỪNG")
+			end)
+
+		else
+			warn("⛔ Auto Retry ĐÃ TẮT THỦ CÔNG")
+		end
+	end,
+})
+
+
+-- Ultra Global Fix-Lag Toggle (works across most places)
+-- - Minimizes graphics, disables particles/lighting/effects/sounds
+-- - Toggle on/off; attempts to restore saved values on off
+-- - Use in your client (private/test). Some restores require reload to fully revert.
+
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
+local HttpService = game:GetService("HttpService")
+
+-- CONFIG
+local CHECK_INTERVAL = 2          -- how often (seconds) to re-scan and enforce low-graphics
+local TARGET_QUALITY = Enum.QualityLevel.Level01
+local MAKE_TRANSPARENT_DECALS = true
+local SILENCE_SOUNDS = true
+
+-- STATE storage for restoration
+local saved = {
+    lighting = {},
+    terrain = {},
+    objects = {},      -- [obj] = {prop = oldValue, ...}
+    playerChars = {},  -- store a few player character original part materials etc
+    quality = nil
+}
+
+local active = false
+local enforcementThread = nil
+
+-- helper: safe pcall property get/set
+local function safeSet(obj, prop, value)
+    if not obj or not prop then return end
+    local ok, err = pcall(function()
+        obj[prop] = value
+    end)
+    if not ok then
+        -- ignore
+    end
+end
+
+local function safeGet(obj, prop)
+    if not obj or not prop then return nil end
+    local ok, res = pcall(function() return obj[prop] end)
+    if ok then return res end
+    return nil
+end
+
+-- Save lighting original settings
+local function saveLighting()
+    local L = Lighting
+    saved.lighting.GlobalShadows = safeGet(L, "GlobalShadows")
+    saved.lighting.FogEnd = safeGet(L, "FogEnd")
+    saved.lighting.Brightness = safeGet(L, "Brightness")
+    saved.lighting.ClockTime = safeGet(L, "ClockTime")
+    saved.lighting.EnvironmentDiffuseScale = safeGet(L, "EnvironmentDiffuseScale")
+    saved.lighting.EnvironmentSpecularScale = safeGet(L, "EnvironmentSpecularScale")
+    saved.lighting.OutdoorAmbient = safeGet(L, "OutdoorAmbient")
+    saved.quality = safeGet(settings(), "Rendering").QualityLevel
+end
+
+-- Restore lighting
+local function restoreLighting()
+    local L = Lighting
+    if saved.lighting.GlobalShadows ~= nil then safeSet(L, "GlobalShadows", saved.lighting.GlobalShadows) end
+    if saved.lighting.FogEnd ~= nil then safeSet(L, "FogEnd", saved.lighting.FogEnd) end
+    if saved.lighting.Brightness ~= nil then safeSet(L, "Brightness", saved.lighting.Brightness) end
+    if saved.lighting.ClockTime ~= nil then safeSet(L, "ClockTime", saved.lighting.ClockTime) end
+    if saved.lighting.EnvironmentDiffuseScale ~= nil then safeSet(L, "EnvironmentDiffuseScale", saved.lighting.EnvironmentDiffuseScale) end
+    if saved.lighting.EnvironmentSpecularScale ~= nil then safeSet(L, "EnvironmentSpecularScale", saved.lighting.EnvironmentSpecularScale) end
+    if saved.lighting.OutdoorAmbient ~= nil then safeSet(L, "OutdoorAmbient", saved.lighting.OutdoorAmbient) end
+    if saved.quality ~= nil then
+        pcall(function() settings().Rendering.QualityLevel = saved.quality end)
+    end
+end
+
+-- Save terrain properties if present
+local function saveTerrain()
+    local T = Workspace:FindFirstChildOfClass("Terrain")
+    if not T then return end
+    saved.terrain.WaterWaveSize = safeGet(T, "WaterWaveSize")
+    saved.terrain.WaterWaveSpeed = safeGet(T, "WaterWaveSpeed")
+    saved.terrain.WaterReflectance = safeGet(T, "WaterReflectance")
+    saved.terrain.WaterTransparency = safeGet(T, "WaterTransparency")
+end
+
+local function restoreTerrain()
+    local T = Workspace:FindFirstChildOfClass("Terrain")
+    if not T then return end
+    if saved.terrain.WaterWaveSize ~= nil then safeSet(T, "WaterWaveSize", saved.terrain.WaterWaveSize) end
+    if saved.terrain.WaterWaveSpeed ~= nil then safeSet(T, "WaterWaveSpeed", saved.terrain.WaterWaveSpeed) end
+    if saved.terrain.WaterReflectance ~= nil then safeSet(T, "WaterReflectance", saved.terrain.WaterReflectance) end
+    if saved.terrain.WaterTransparency ~= nil then safeSet(T, "WaterTransparency", saved.terrain.WaterTransparency) end
+end
+
+-- Record an object's property for restore later (first time only)
+local function recordObjectProp(obj, prop)
+    if not obj or not prop then return end
+    if not saved.objects[obj] then
+        saved.objects[obj] = {}
+    end
+    if saved.objects[obj][prop] == nil then
+        saved.objects[obj][prop] = safeGet(obj, prop)
+    end
+end
+
+-- Apply low-graphics transformation for a single descendant
+local function minimizeObject(obj)
+    if not obj then return end
+    -- Part-ish: set material / reflectance
+    if obj:IsA("BasePart") then
+        recordObjectProp(obj, "Material")
+        recordObjectProp(obj, "Reflectance")
+        safeSet(obj, "Material", Enum.Material.SmoothPlastic)
+        safeSet(obj, "Reflectance", 0)
+    end
+
+    -- Particles / Trails / Beams
+    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
+        recordObjectProp(obj, "Enabled")
+        safeSet(obj, "Enabled", false)
+    end
+
+    -- Fire/Smoke/Sparkles/Explosion
+    if obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") or obj:IsA("Explosion") then
+        recordObjectProp(obj, "Enabled")
+        safeSet(obj, "Enabled", false)
+    end
+
+    -- Lights
+    if obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
+        recordObjectProp(obj, "Enabled")
+        safeSet(obj, "Enabled", false)
+    end
+
+    -- Decals / Textures
+    if obj:IsA("Decal") or obj:IsA("Texture") then
+        recordObjectProp(obj, "Transparency")
+        if MAKE_TRANSPARENT_DECALS then
+            safeSet(obj, "Transparency", 1)
+        end
+    end
+
+    -- Sounds (stop looping/ reduce volume)
+    if obj:IsA("Sound") then
+        recordObjectProp(obj, "Playing")
+        recordObjectProp(obj, "Volume")
+        if SILENCE_SOUNDS then
+            pcall(function()
+                obj.Looped = false
+                obj:Stop()
+                obj.Volume = 0
+            end)
+        end
+    end
+
+    -- SpecialMeshes: set scale small? skip for safety
+end
+
+-- Restore recorded object properties
+local function restoreObjects()
+    for obj, props in pairs(saved.objects) do
+        if obj and obj.Parent then
+            for prop, val in pairs(props) do
+                pcall(function() obj[prop] = val end)
+            end
+        end
+    end
+    saved.objects = {}
+end
+
+-- Simplify player characters (store and set)
+local function minimizePlayerCharacters()
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl.Character and pl ~= Players.LocalPlayer then
+            local char = pl.Character
+            if not saved.playerChars[pl] then saved.playerChars[pl] = {} end
+            -- iterate parts
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if saved.playerChars[pl][part] == nil then
+                        saved.playerChars[pl][part] = {
+                            Material = safeGet(part, "Material"),
+                            Reflectance = safeGet(part, "Reflectance"),
+                            Transparency = safeGet(part, "Transparency")
+                        }
+                    end
+                    safeSet(part, "Material", Enum.Material.SmoothPlastic)
+                    safeSet(part, "Reflectance", 0)
+                    safeSet(part, "Transparency", 0)
+                elseif part:IsA("ParticleEmitter") then
+                    if saved.playerChars[pl][part] == nil then
+                        saved.playerChars[pl][part] = {Enabled = safeGet(part, "Enabled")}
+                    end
+                    safeSet(part, "Enabled", false)
+                elseif part:IsA("Decal") or part:IsA("Texture") then
+                    if saved.playerChars[pl][part] == nil then
+                        saved.playerChars[pl][part] = {Transparency = safeGet(part, "Transparency")}
+                    end
+                    safeSet(part, "Transparency", 1)
+                end
+            end
+        end
+    end
+end
+
+local function restorePlayerCharacters()
+    for pl, data in pairs(saved.playerChars) do
+        if pl and pl.Character then
+            for part, props in pairs(data) do
+                if part and part.Parent then
+                    for k, v in pairs(props) do
+                        pcall(function() part[k] = v end)
+                    end
+                end
+            end
+        end
+    end
+    saved.playerChars = {}
+end
+
+-- Global minimize pass (scan workspace / players)
+local function doMinimizePass()
+    -- lighting/quality
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 1e9
+        Lighting.Brightness = 1
+        Lighting.ClockTime = 14
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+        settings().Rendering.QualityLevel = TARGET_QUALITY
+    end)
+
+    -- terrain
+    local T = Workspace:FindFirstChildOfClass("Terrain")
+    if T then
+        pcall(function()
+            T.WaterWaveSize = 0
+            T.WaterWaveSpeed = 0
+            T.WaterReflectance = 0
+            T.WaterTransparency = 1
+        end)
+    end
+
+    -- scan and minimize existing descendants
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        minimizeObject(obj)
+    end
+
+    -- minimize players
+    minimizePlayerCharacters()
+end
+
+-- enforcement loop
+local function startEnforcement()
+    enforcementThread = task.spawn(function()
+        while active do
+            local ok, err = pcall(doMinimizePass)
+            if not ok then
+                -- ignore errors
+            end
+            task.wait(CHECK_INTERVAL)
+        end
+    end)
+end
+
+-- stop enforcement and attempt restore
+local function stopEnforcement()
+    active = false
+    if enforcementThread then
+        -- thread will exit next loop
+        enforcementThread = nil
+    end
+    -- restore modified objects
+    pcall(restoreObjects)
+    pcall(restorePlayerCharacters)
+    pcall(restoreLighting)
+    pcall(restoreTerrain)
+    -- Note: many transient objects created while script active won't be restored automatically.
+end
+
+-- UI toggle integration
+local function createToggleUsingMiscTab()
+    if type(MiscTab) == "table" and MiscTab.CreateToggle then
+        MiscTab:CreateToggle({
+            Name = "Fix Lag: Ultra (global)",
+            CurrentValue = false,
+            Flag = "Toggle_FixLagUltra",
+            Callback = function(Value)
+                if Value then
+                    -- save initial state
+                    saveLighting()
+                    saveTerrain()
+                    -- start
+                    active = true
+                    startEnforcement()
+                    print("[FixLag] Ultra ON")
+                else
+                    -- stop and restore
+                    stopEnforcement()
+                    print("[FixLag] Ultra OFF (partial restore attempted)")
+                end
+            end,
+        })
+        return true
+    end
+    return false
+end
+
+-- Fallback: create a simple ScreenGui toggle button if MiscTab not present
+local function createSimpleGuiToggle()
+    local screen = Instance.new("ScreenGui")
+    screen.Name = "FixLagUltraGui"
+    screen.ResetOnSpawn = false
+    screen.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 220, 0, 40)
+    btn.Position = UDim2.new(1, -240, 0, 40)
+    btn.AnchorPoint = Vector2.new(0, 0)
+    btn.Text = "Fix Lag Ultra: OFF"
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.Parent = screen
+
+    btn.MouseButton1Click:Connect(function()
+        if not active then
+            saveLighting()
+            saveTerrain()
+            active = true
+            startEnforcement()
+            btn.Text = "Fix Lag Ultra: ON"
+            btn.BackgroundColor3 = Color3.fromRGB(50,150,60)
+        else
+            stopEnforcement()
+            btn.Text = "Fix Lag Ultra: OFF"
+            btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+        end
+    end)
+end
+
+-- Try to attach to MiscTab; otherwise fallback to basic GUI
+local ok = pcall(function() return createToggleUsingMiscTab() end)
+if not ok or not ok then
+    createSimpleGuiToggle()
+end
+
+print("[FixLagUltra] Loaded - toggle available.")
+
+
+
+
+local WalkspeedInput = MiscTab:CreateInput({
+    Name = "Walkspeed Input",
+    PlaceholderText = "Nhập tốc độ (VD: 100)",
+    CurrentValue = "16",
+    RemoveTextAfterFocusLost = false,
+    Flag = "Walkspeed_Input",
+
+    Callback = function(Text)
+        local Speed = tonumber(Text)
+        if not Speed then
+            warn("❌ Hãy nhập số hợp lệ!")
+            return
+        end
+
+        Speed = math.clamp(Speed, 0, 300)
+
+        local player = game.Players.LocalPlayer
+        local humanoid = player and player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = Speed
+            warn("✅ Đặt tốc độ thành:", Speed)
+        end
+    end,
+})
+
+-- 🧠 Thêm sự kiện auto-clear khi click vào textbox
+task.spawn(function()
+    task.wait(1) -- đợi UI load xong
+    local box = WalkspeedInput.InputBox or WalkspeedInput.TextBox or WalkspeedInput
+
+    if box and box.FocusGained then
+        box.FocusGained:Connect(function()
+            box.Text = "" -- xoá nội dung hiện tại khi click vào
+        end)
+    else
+        warn("⚠️ Không tìm thấy TextBox (có thể UI lib của bạn dùng tên khác)")
+    end
+end)
+
+-- 🧠 Tự động khôi phục lại trạng thái Toggle/Input khi mở lại game
+task.spawn(function()
+    task.wait(1) -- đợi UI load hoàn tất
+    Rayfield.LoadConfiguration() -- khôi phục mọi giá trị đã lưu
+end)
+
+
+
