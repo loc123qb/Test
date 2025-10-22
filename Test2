@@ -303,9 +303,9 @@ local LocalPlayer = Players.LocalPlayer
 -- ⚙️ Cấu hình
 local tweenSpeed = 50
 local hoverHeight = 22
-local maxRange = 500
+local maxRange = 450
 local teleportDistance = 30
-local teleportDelay = 2
+local teleportDelay = 0.5
 _G.AutoTween = false
 
 -- 🧠 Hàm tìm Humanoid + Root
