@@ -305,7 +305,7 @@ local tweenSpeed = 50
 local hoverHeight = 22
 local maxRange = 450
 local teleportDistance = 30
-local teleportDelay = 0.5
+local teleportDelay = 1
 _G.AutoTween = false
 
 -- 🧠 Hàm tìm Humanoid + Root
