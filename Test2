@@ -301,11 +301,11 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 40
-local hoverHeight = 18
-local maxRange = 400
+local tweenSpeed = 50
+local hoverHeight = 22
+local maxRange = 500
 local teleportDistance = 30
-local teleportDelay = 1.5
+local teleportDelay = 2
 _G.AutoTween = false
 
 -- 🧠 Hàm tìm Humanoid + Root
