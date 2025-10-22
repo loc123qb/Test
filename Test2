@@ -302,7 +302,7 @@ local LocalPlayer = Players.LocalPlayer
 
 -- ⚙️ Cấu hình
 local tweenSpeed = 50
-local hoverHeight = 22
+local hoverHeight = 18
 local maxRange = 450
 local teleportDistance = 30
 local teleportDelay = 1.5
