@@ -407,7 +407,7 @@ local function getFarthestNPC()
 	return farthest
 end
 
--- 🌀 Di chuyển mượt quanh NPC theo hình tròn (sát mặt đất thực tế, không theo vị trí HRP của NPC)
+-- 🌀 Di chuyển mượt quanh NPC theo hình tròn
 local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -425,87 +425,36 @@ local function tweenTo(target)
 	fakeRoot.CFrame = root.CFrame
 	fakeRoot.Parent = Workspace
 
-	-- Teleport an toàn ban đầu (với kiểm tra mặt đất dưới safePos)
 	local distance = (root.Position - targetRoot.Position).Magnitude
 	if distance > teleportDistance then
 		task.wait(teleportDelay)
 		local direction = (targetRoot.Position - root.Position).Unit
 		local safePos = targetRoot.Position - direction * teleportDistance
-
-		-- Raycast để tìm mặt đất dưới safePos
-		local rayOriginSafe = safePos + Vector3.new(0, 50, 0)
-		local rayDirSafe = Vector3.new(0, -120, 0)
-		local paramsSafe = RaycastParams.new()
-		paramsSafe.FilterDescendantsInstances = {LocalPlayer.Character, target}
-		paramsSafe.FilterType = Enum.RaycastFilterType.Exclude
-		local resSafe = Workspace:Raycast(rayOriginSafe, rayDirSafe, paramsSafe)
-		local finalY = safePos.Y
-		if resSafe and resSafe.Position then
-			finalY = resSafe.Position.Y + hoverHeight
-		else
-			finalY = safePos.Y + hoverHeight
-		end
-
-		root.CFrame = CFrame.new(safePos.X, finalY, safePos.Z)
+		root.CFrame = CFrame.new(safePos + Vector3.new(0, hoverHeight, 0))
 		fakeRoot.CFrame = root.CFrame
 	end
 
-	-- 🔵 Tìm mặt đất dưới NPC để lấy center.Y (không lấy targetRoot.Y trực tiếp)
-	local rayOrigin = targetRoot.Position + Vector3.new(0, 50, 0)
-	local rayDir = Vector3.new(0, -200, 0)
-	local rayParams = RaycastParams.new()
-	rayParams.FilterDescendantsInstances = {LocalPlayer.Character, target}
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	local rayResult = Workspace:Raycast(rayOrigin, rayDir, rayParams)
-
-	local baseY = targetRoot.Position.Y
-	if rayResult and rayResult.Position then
-		baseY = rayResult.Position.Y
-	end
-
-	local center = Vector3.new(targetRoot.Position.X, baseY + hoverHeight, targetRoot.Position.Z)
-
-	local angleStep = math.rad(8) -- nhỏ hơn -> mượt hơn
-	local totalSteps = math.floor(2 * math.pi / angleStep)
+	-- 🔵 Tạo chuyển động hình tròn quanh NPC
+	local center = targetRoot.Position + Vector3.new(0, hoverHeight, 0)
+	local angleStep = math.rad(10) -- Mỗi bước di chuyển 10 độ
+	local totalSteps = math.floor(360 / 10)
 
 	for i = 1, totalSteps do
 		if not _G.AutoTween then break end
-
-		local angle = (i * angleStep)
+		local angle = math.rad(i * 10)
 		local offsetX = math.cos(angle) * orbitRadius
 		local offsetZ = math.sin(angle) * orbitRadius
-		local horizontalPos = Vector3.new(center.X + offsetX, center.Y + 50, center.Z + offsetZ) -- bắt đầu cao để raycast xuống
-
-		-- Raycast xuống từ điểm ngang để tìm mặt đất thực tế ở đó
-		local rOrigin = horizontalPos
-		local rDir = Vector3.new(0, -120, 0)
-		local rp = RaycastParams.new()
-		rp.FilterDescendantsInstances = {LocalPlayer.Character, target}
-		rp.FilterType = Enum.RaycastFilterType.Exclude
-
-		local rRes = Workspace:Raycast(rOrigin, rDir, rp)
-		local groundY = center.Y -- fallback
-		if rRes and rRes.Position then
-			groundY = rRes.Position.Y + hoverHeight
-		else
-			-- nếu không bắt được mặt đất, giữ độ cao so với center (tránh lao xuống chân trời)
-			groundY = center.Y
-		end
-
-		local targetPos = Vector3.new(center.X + offsetX, groundY, center.Z + offsetZ)
+		local targetPos = center + Vector3.new(offsetX, 0, offsetZ)
 
 		local duration = orbitDuration / totalSteps
 		local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-		local tween = TweenService:Create(fakeRoot, tweenInfo, { CFrame = CFrame.new(targetPos) * CFrame.Angles(0, -angle, 0) })
+		local tween = TweenService:Create(fakeRoot, tweenInfo, { CFrame = CFrame.new(targetPos) * CFrame.Angles(0, angle, 0) })
 		tween:Play()
 
 		task.spawn(function()
 			while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
-				-- cập nhật root theo fakeRoot để di chuyển mượt
-				if root and root.Parent then
-					root.CFrame = fakeRoot.CFrame
-					root.Velocity = Vector3.zero
-				end
+				root.CFrame = fakeRoot.CFrame
+				root.Velocity = Vector3.zero
 				task.wait()
 			end
 		end)
@@ -515,7 +464,6 @@ local function tweenTo(target)
 
 	fakeRoot:Destroy()
 end
-
 
 -- ⚡ Auto Dodge Skill
 local lastDodge = 0
