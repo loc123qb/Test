@@ -345,9 +345,7 @@ end)
 -- ========= END =========
 
 
-
-
---// 🌊 Auto Farm Hover Tween - Smooth Version (NPC Farthest Target) + Square Move Pattern + Fast Smooth Auto Dodge
+--// 🌊 Auto Farm Hover Tween - Smooth Circle Around NPC + Smooth Auto Dodge
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -355,8 +353,8 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 50
-local hoverHeight = 0
+local tweenSpeed = 35 -- 🌀 Tốc độ di chuyển (giảm để mượt hơn)
+local hoverHeight = 5 -- ✈️ Độ cao khi bay quanh NPC
 local maxRange = 4000
 local teleportDistance = 30
 local teleportDelay = 1.5
@@ -365,186 +363,185 @@ _G.AutoDodge = true
 local dodgeDistance = 18
 local dodgeCooldown = 0.7
 local dodgeDetectRange = 30
-local squareSize = 25 -- 🔲 Kích thước cạnh hình vuông
-local squarePause = 0.15 -- ⏸️ Thời gian chờ giữa các cạnh
+local orbitRadius = 25 -- 🔵 Bán kính quay quanh NPC
+local orbitDuration = 3.5 -- ⏱️ Thời gian hoàn thành 1 vòng
 
--- 🧠 Hàm hỗ trợ
+-- 🧠 Hàm tìm Humanoid + Root
 local function getHumanoidAndRoot(model)
-    if not model then return end
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    local root = model:FindFirstChild("HumanoidRootPart")
-    return hum, root
+	if not model then return end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	local root = model:FindFirstChild("HumanoidRootPart")
+	return hum, root
 end
 
+-- 🧩 Kiểm tra model có phải người chơi không
 local function isPlayerModel(model)
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player.Character == model then
-            return true
-        end
-    end
-    return false
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character == model then
+			return true
+		end
+	end
+	return false
 end
 
+-- 🔍 Tìm NPC xa nhất
 local function getFarthestNPC()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local _, root = getHumanoidAndRoot(char)
-    if not root then return end
-    local farthest, longest = nil, 0
-    for _, v in ipairs(Workspace:GetDescendants()) do
-        if v:IsA("Model") and v ~= char then
-            local hum, hrp = getHumanoidAndRoot(v)
-            if hum and hrp and hum.Health > 0 and not isPlayerModel(v) then
-                local dist = (hrp.Position - root.Position).Magnitude
-                if dist > longest and dist < maxRange then
-                    longest = dist
-                    farthest = v
-                end
-            end
-        end
-    end
-    return farthest
+	local char = LocalPlayer.Character
+	if not char then return end
+	local _, root = getHumanoidAndRoot(char)
+	if not root then return end
+
+	local farthest, longest = nil, 0
+	for _, v in ipairs(Workspace:GetDescendants()) do
+		if v:IsA("Model") and v ~= char then
+			local hum, hrp = getHumanoidAndRoot(v)
+			if hum and hrp and hum.Health > 0 and not isPlayerModel(v) then
+				local dist = (hrp.Position - root.Position).Magnitude
+				if dist > longest and dist < maxRange then
+					longest = dist
+					farthest = v
+				end
+			end
+		end
+	end
+	return farthest
 end
 
--- 🧭 Di chuyển mượt + theo hình vuông quanh mục tiêu
+-- 🌀 Di chuyển mượt quanh NPC theo hình tròn
 local function tweenTo(target)
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum, root = getHumanoidAndRoot(char)
-    if not root then return end
-    if not target then return end
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum, root = getHumanoidAndRoot(char)
+	if not root then return end
+	if not target then return end
 
-    local _, targetRoot = getHumanoidAndRoot(target)
-    if not targetRoot then return end
+	local _, targetRoot = getHumanoidAndRoot(target)
+	if not targetRoot then return end
 
-    -- FakeRoot giữ vị trí di chuyển
-    local fakeRoot = Instance.new("Part")
-    fakeRoot.Anchored = true
-    fakeRoot.CanCollide = false
-    fakeRoot.Transparency = 1
-    fakeRoot.CFrame = root.CFrame
-    fakeRoot.Parent = Workspace
+	local fakeRoot = Instance.new("Part")
+	fakeRoot.Anchored = true
+	fakeRoot.CanCollide = false
+	fakeRoot.Transparency = 1
+	fakeRoot.CFrame = root.CFrame
+	fakeRoot.Parent = Workspace
 
-    -- Teleport nếu quá xa
-    local distance = (root.Position - targetRoot.Position).Magnitude
-    if distance > teleportDistance then
-        task.wait(teleportDelay)
-        local direction = (targetRoot.Position - root.Position).Unit
-        local safePos = targetRoot.Position - direction * teleportDistance
-        root.CFrame = CFrame.new(safePos + Vector3.new(0, hoverHeight, 0))
-        fakeRoot.CFrame = root.CFrame
-    end
+	local distance = (root.Position - targetRoot.Position).Magnitude
+	if distance > teleportDistance then
+		task.wait(teleportDelay)
+		local direction = (targetRoot.Position - root.Position).Unit
+		local safePos = targetRoot.Position - direction * teleportDistance
+		root.CFrame = CFrame.new(safePos + Vector3.new(0, hoverHeight, 0))
+		fakeRoot.CFrame = root.CFrame
+	end
 
-    -- 🔲 Di chuyển quanh NPC theo hình vuông (4 góc)
-    local center = targetRoot.Position + Vector3.new(0, hoverHeight, 0)
-    local forward = targetRoot.CFrame.LookVector
-    local right = targetRoot.CFrame.RightVector
+	-- 🔵 Tạo chuyển động hình tròn quanh NPC
+	local center = targetRoot.Position + Vector3.new(0, hoverHeight, 0)
+	local angleStep = math.rad(10) -- Mỗi bước di chuyển 10 độ
+	local totalSteps = math.floor(360 / 10)
 
-    local corners = {
-        center + forward * squareSize + right * squareSize,
-        center + forward * squareSize - right * squareSize,
-        center - forward * squareSize - right * squareSize,
-        center - forward * squareSize + right * squareSize,
-    }
+	for i = 1, totalSteps do
+		if not _G.AutoTween then break end
+		local angle = math.rad(i * 10)
+		local offsetX = math.cos(angle) * orbitRadius
+		local offsetZ = math.sin(angle) * orbitRadius
+		local targetPos = center + Vector3.new(offsetX, 0, offsetZ)
 
-    for _, corner in ipairs(corners) do
-        if not _G.AutoTween then break end
-        local duration = math.clamp((root.Position - corner).Magnitude / tweenSpeed, 0.2, 1.8)
-        local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-        local tween = TweenService:Create(fakeRoot, tweenInfo, { CFrame = CFrame.new(corner) })
-        tween:Play()
+		local duration = orbitDuration / totalSteps
+		local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+		local tween = TweenService:Create(fakeRoot, tweenInfo, { CFrame = CFrame.new(targetPos) * CFrame.Angles(0, angle, 0) })
+		tween:Play()
 
-        task.spawn(function()
-            while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
-                root.CFrame = fakeRoot.CFrame
-                root.Velocity = Vector3.zero
-                task.wait()
-            end
-        end)
+		task.spawn(function()
+			while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
+				root.CFrame = fakeRoot.CFrame
+				root.Velocity = Vector3.zero
+				task.wait()
+			end
+		end)
 
-        tween.Completed:Wait()
-        task.wait(squarePause)
-    end
+		tween.Completed:Wait()
+	end
 
-    fakeRoot:Destroy()
+	fakeRoot:Destroy()
 end
 
--- ⚡ Auto Dodge Skill (Tween-based)
+-- ⚡ Auto Dodge Skill
 local lastDodge = 0
 local isDodging = false
 local function autoDodge()
-    if not _G.AutoDodge or isDodging then return end
-    if tick() - lastDodge < dodgeCooldown then return end
+	if not _G.AutoDodge or isDodging then return end
+	if tick() - lastDodge < dodgeCooldown then return end
 
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum, root = getHumanoidAndRoot(char)
-    if not root then return end
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum, root = getHumanoidAndRoot(char)
+	if not root then return end
 
-    for _, v in ipairs(Workspace:GetDescendants()) do
-        if v:IsA("BasePart") and v.Parent and not isPlayerModel(v.Parent) then
-            local n = v.Name:lower()
-            if n:find("hit") or n:find("attack") or n:find("projectile") or n:find("skill") or n:find("effect") then
-                local dist = (v.Position - root.Position).Magnitude
-                if dist < dodgeDetectRange then
-                    isDodging = true
-                    lastDodge = tick()
+	for _, v in ipairs(Workspace:GetDescendants()) do
+		if v:IsA("BasePart") and v.Parent and not isPlayerModel(v.Parent) then
+			local n = v.Name:lower()
+			if n:find("hit") or n:find("attack") or n:find("projectile") or n:find("skill") or n:find("effect") then
+				local dist = (v.Position - root.Position).Magnitude
+				if dist < dodgeDetectRange then
+					isDodging = true
+					lastDodge = tick()
 
-                    local side = math.random(0, 1) == 0 and -1 or 1
-                    local dodgeDir = root.CFrame.RightVector * side * dodgeDistance
-                    local newPos = root.Position + dodgeDir + Vector3.new(0, 1.5, 0)
+					local side = math.random(0, 1) == 0 and -1 or 1
+					local dodgeDir = root.CFrame.RightVector * side * dodgeDistance
+					local newPos = root.Position + dodgeDir + Vector3.new(0, 1.5, 0)
 
-                    local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-                    local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(newPos) })
-                    tween:Play()
-                    tween.Completed:Connect(function()
-                        isDodging = false
-                    end)
-                    break
-                end
-            end
-        end
-    end
+					local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+					local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(newPos) })
+					tween:Play()
+					tween.Completed:Connect(function()
+						isDodging = false
+					end)
+					break
+				end
+			end
+		end
+	end
 end
 
 -- 🔁 Auto Farm Loop
 task.spawn(function()
-    repeat task.wait() until _G.ComboDone == true
+	repeat task.wait() until _G.ComboDone == true
 
-    while task.wait(0.25) do
-        if _G.AutoTween then
-            autoDodge()
-            local npc = getFarthestNPC()
-            if npc then
-                tweenTo(npc)
-            end
-        end
-    end
+	while task.wait(0.25) do
+		if _G.AutoTween then
+			autoDodge()
+			local npc = getFarthestNPC()
+			if npc then
+				tweenTo(npc)
+			end
+		end
+	end
 end)
 
 -- 🪄 Toggle GUI
 local Toggle = Tab:CreateToggle({
-    Name = "Auto Farm (Square Move Around NPC)",
-    CurrentValue = false,
-    Flag = "ToggleAutoFarm",
-    Callback = function(Value)
-        _G.AutoTween = Value
-        local char = LocalPlayer.Character
-        if not char then return end
-        local hum, root = getHumanoidAndRoot(char)
-        if not hum or not root then return end
+	Name = "Auto Farm (Circle Around NPC)",
+	CurrentValue = false,
+	Flag = "ToggleAutoFarm",
+	Callback = function(Value)
+		_G.AutoTween = Value
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum, root = getHumanoidAndRoot(char)
+		if not hum or not root then return end
 
-        if Value then
-            hum.PlatformStand = true
-            hum:ChangeState(Enum.HumanoidStateType.Physics)
-            warn("[AUTO-FARM] ✅ Đã bật: Di chuyển theo hình vuông quanh NPC (ưu tiên xa nhất).")
-        else
-            hum.PlatformStand = false
-            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-            warn("[AUTO-FARM] ⛔ Đã tắt.")
-        end
-    end
+		if Value then
+			hum.PlatformStand = true
+			hum:ChangeState(Enum.HumanoidStateType.Physics)
+			warn("[AUTO-FARM] ✅ Đã bật: Di chuyển quanh NPC theo hình tròn (ưu tiên xa nhất).")
+		else
+			hum.PlatformStand = false
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			warn("[AUTO-FARM] ⛔ Đã tắt.")
+		end
+	end
 })
+
 
 
 
