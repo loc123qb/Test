@@ -353,18 +353,18 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 25 -- 🌀 Tốc độ di chuyển (giảm để mượt hơn)
-local hoverHeight = -1 -- ✈️ Độ cao khi bay quanh NPC
+local tweenSpeed = 15 -- 🌀 Tốc độ di chuyển (giảm để mượt hơn)
+local hoverHeight = 0 -- ✈️ Độ cao khi bay quanh NPC
 local maxRange = 4000
 local teleportDistance = 0
-local teleportDelay = 1
+local teleportDelay = 0
 _G.AutoTween = false
 _G.AutoDodge = false
 local dodgeDistance = 18
 local dodgeCooldown = 0.7
 local dodgeDetectRange = 30
-local orbitRadius = 25 -- 🔵 Bán kính quay quanh NPC
-local orbitDuration = 3.5 -- ⏱️ Thời gian hoàn thành 1 vòng
+local orbitRadius = 20 -- 🔵 Bán kính quay quanh NPC
+local orbitDuration = 3 -- ⏱️ Thời gian hoàn thành 1 vòng
 
 -- 🧠 Hàm tìm Humanoid + Root
 local function getHumanoidAndRoot(model)
