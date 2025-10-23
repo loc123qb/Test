@@ -354,7 +354,7 @@ local function getNearestNPC()
 	return nearest
 end
 
--- 🧭 Di chuyển mượt (FakeRoot Tween)
+-- 🧭 Di chuyển mượt (FakeRoot Tween) — GIỮ NGUYÊN, chỉ sửa vị trí dịch chuyển
 local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -378,18 +378,27 @@ local function tweenTo(target)
 	if distance > teleportDistance then
 		task.wait(teleportDelay)
 		local direction = (targetRoot.Position - root.Position).Unit
-		local safePos = targetRoot.Position - direction * teleportDistance
+
+		-- 🧩 Sửa: dịch chuyển đến phía sau NPC thay vì ngay trên đầu
+		local backOffset = -targetRoot.CFrame.LookVector * 8 -- đứng cách sau 8 stud
+		local safePos = targetRoot.Position + backOffset
 		local safeY = getSafeYPosition(safePos)
-		root.CFrame = CFrame.new(Vector3.new(safePos.X, safeY, safePos.Z))
+
+		root.CFrame = CFrame.new(Vector3.new(safePos.X, safeY, safePos.Z), targetRoot.Position)
 		fakeRoot.CFrame = root.CFrame
 	end
 
-	-- Tween fake root tới đầu NPC
-	local targetPos = targetRoot.Position
+	-- 🧩 Sửa: điểm đến nằm phía sau NPC, cùng hướng nhìn
+	local backOffset = -targetRoot.CFrame.LookVector * 8
+	local targetPos = targetRoot.Position + backOffset
 	local safeY = getSafeYPosition(targetPos)
+
+	-- 🧩 Sửa: giảm hiệu ứng “nhấp nhô” → không hover động
 	local finalPos = Vector3.new(targetPos.X, safeY, targetPos.Z)
+	local finalCFrame = CFrame.new(finalPos, targetRoot.Position)
+
 	local duration = math.clamp(distance / tweenSpeed, 0.2, 3)
-	local goal = { CFrame = CFrame.new(finalPos) }
+	local goal = { CFrame = finalCFrame }
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 	local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
 	tween:Play()
@@ -406,6 +415,7 @@ local function tweenTo(target)
 	tween.Completed:Wait()
 	fakeRoot:Destroy()
 end
+
 
 -- 🔁 Auto Farm Loop
 task.spawn(function()
