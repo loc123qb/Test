@@ -1,5 +1,4 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/Puhcoder16/theme/refs/heads/main/theme"))()
     local Window = Rayfield:CreateWindow({
    Name = "Loc dep trai",
    Icon = 0, -- Icon in Topbar. Can use Lucide Icons (string) or Roblox Image (number). 0 to use no icon (default).
@@ -302,10 +301,10 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 30
+local tweenSpeed = 70
 local hoverHeight = 18
-local maxRange = 4000
-local teleportDistance = 30
+local maxRange = 450
+local teleportDistance = 10
 local teleportDelay = 1.5
 _G.AutoTween = false
 
@@ -898,6 +897,3 @@ task.spawn(function()
     task.wait(1) -- đợi UI load hoàn tất
     Rayfield.LoadConfiguration() -- khôi phục mọi giá trị đã lưu
 end)
-
-
-
