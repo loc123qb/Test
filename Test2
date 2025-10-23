@@ -293,7 +293,7 @@ end)
 -- ========= END =========
 
 
---// 🌊 Auto Farm Hover Tween - Safe Teleport Version (No Fall)
+--// 🌊 Auto Farm Hover Tween - Safe Teleport + Auto Dodge
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -305,6 +305,8 @@ local hoverHeight = 18
 local maxRange = 450
 local teleportDistance = 10
 local teleportDelay = 1.5
+local dodgeAmplitude = 2      -- Biên độ né (độ dao động)
+local dodgeSpeed = 3          -- Tốc độ dao động
 _G.AutoTween = false
 
 -- 🧠 Hàm tìm Humanoid + Root
@@ -354,7 +356,7 @@ local function getNearestNPC()
 	return nearest
 end
 
--- 🧭 Di chuyển mượt (FakeRoot Tween)
+-- 🧭 Di chuyển mượt (FakeRoot Tween + Auto Dodge)
 local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -394,10 +396,13 @@ local function tweenTo(target)
 	local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
 	tween:Play()
 
-	-- Trong khi tween fakeRoot → đặt nhân vật theo fakeRoot
+	-- Trong khi tween fakeRoot → đặt nhân vật theo fakeRoot (có né skill)
 	task.spawn(function()
 		while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
-			root.CFrame = fakeRoot.CFrame
+			local driftX = math.sin(tick() * dodgeSpeed) * dodgeAmplitude
+			local driftZ = math.cos(tick() * (dodgeSpeed + 0.7)) * dodgeAmplitude
+			local offset = Vector3.new(driftX, 0, driftZ)
+			root.CFrame = fakeRoot.CFrame * CFrame.new(offset)
 			root.Velocity = Vector3.zero
 			task.wait()
 		end
@@ -420,6 +425,31 @@ task.spawn(function()
 		end
 	end
 end)
+
+-- 🪄 Toggle GUI
+local Toggle = Tab:CreateToggle({
+	Name = "Auto Farm",
+	CurrentValue = false,
+	Flag = "ToggleAutoFarm",
+	Callback = function(Value)
+		_G.AutoTween = Value
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum, root = getHumanoidAndRoot(char)
+		if not hum or not root then return end
+
+		if Value then
+			hum.PlatformStand = true
+			hum:ChangeState(Enum.HumanoidStateType.Physics)
+			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover + auto dodge né kỹ năng.")
+		else
+			hum.PlatformStand = false
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			warn("[AUTO-FARM] ⛔ Đã tắt.")
+		end
+	end
+})
+
 
 -- 🪄 Toggle GUI
 local Toggle = Tab:CreateToggle({
