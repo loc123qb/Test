@@ -295,16 +295,17 @@ end)
 
 
 
---// 🌊 Auto Farm Hover Tween - Smooth Version (No Jitter)
+--// 🌊 Auto Farm Hover Tween - Smooth Version (Only NPC)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 70
+local tweenSpeed = 50
 local hoverHeight = 18
 local maxRange = 450
-local teleportDistance = 10
+local teleportDistance = 30
 local teleportDelay = 1.5
 _G.AutoTween = false
 
@@ -316,7 +317,17 @@ local function getHumanoidAndRoot(model)
 	return hum, root
 end
 
--- 🔍 Tìm NPC gần nhất
+-- 🧩 Kiểm tra model có phải người chơi không
+local function isPlayerModel(model)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character == model then
+			return true
+		end
+	end
+	return false
+end
+
+-- 🔍 Tìm NPC gần nhất (loại bỏ người chơi)
 local function getNearestNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -324,10 +335,12 @@ local function getNearestNPC()
 	if not root then return end
 
 	local nearest, shortest = nil, math.huge
-	for _, v in ipairs(workspace:GetDescendants()) do
+
+	for _, v in ipairs(Workspace:GetDescendants()) do
 		if v:IsA("Model") and v ~= char then
 			local hum, hrp = getHumanoidAndRoot(v)
-			if hum and hrp and hum.Health > 0 then
+			-- chỉ chọn NPC: có Humanoid, còn sống, KHÔNG phải player
+			if hum and hrp and hum.Health > 0 and not isPlayerModel(v) then
 				local dist = (hrp.Position - root.Position).Magnitude
 				if dist < shortest and dist < maxRange then
 					shortest = dist
@@ -356,7 +369,7 @@ local function tweenTo(target)
 	fakeRoot.CanCollide = false
 	fakeRoot.Transparency = 1
 	fakeRoot.CFrame = root.CFrame
-	fakeRoot.Parent = workspace
+	fakeRoot.Parent = Workspace
 
 	-- Nếu quá xa → chờ và teleport nhẹ tới gần
 	local distance = (root.Position - targetRoot.Position).Magnitude
@@ -405,7 +418,7 @@ end)
 
 -- 🪄 Toggle GUI
 local Toggle = Tab:CreateToggle({
-	Name = "Auto Farm",
+	Name = "Auto Farm (NPC Only)",
 	CurrentValue = false,
 	Flag = "ToggleAutoFarm",
 	Callback = function(Value)
@@ -418,7 +431,7 @@ local Toggle = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover ổn định (no jitter).")
+			warn("[AUTO-FARM] ✅ Đã bật: Chỉ teleport vào NPC, bỏ qua người chơi.")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -426,6 +439,7 @@ local Toggle = Tab:CreateToggle({
 		end
 	end
 })
+
 
 
 local Toggle = MiscTab:CreateToggle({
