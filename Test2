@@ -293,7 +293,7 @@ end)
 -- ========= END =========
 
 
---// 🌊 Auto Farm Hover Tween - Teleport Behind Safe Version (No Fall)
+--// 🌊 Auto Farm Hover Tween - Safe Teleport Version (No Fall)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -305,7 +305,6 @@ local hoverHeight = 18
 local maxRange = 450
 local teleportDistance = 10
 local teleportDelay = 1.5
-local behindDistance = 10 -- khoảng cách đứng sau NPC
 _G.AutoTween = false
 
 -- 🧠 Hàm tìm Humanoid + Root
@@ -317,11 +316,11 @@ local function getHumanoidAndRoot(model)
 end
 
 -- 🌍 Hàm tìm vị trí mặt đất an toàn
-local function getSafeYPosition(pos, ignoreList)
-	local rayOrigin = pos + Vector3.new(0, 100, 0)
-	local rayDirection = Vector3.new(0, -1000, 0)
+local function getSafeYPosition(pos)
+	local rayOrigin = pos + Vector3.new(0, 50, 0)
+	local rayDirection = Vector3.new(0, -500, 0)
 	local params = RaycastParams.new()
-	params.FilterDescendantsInstances = ignoreList or {LocalPlayer.Character}
+	params.FilterDescendantsInstances = {LocalPlayer.Character}
 	params.FilterType = Enum.RaycastFilterType.Exclude
 
 	local result = Workspace:Raycast(rayOrigin, rayDirection, params)
@@ -355,42 +354,57 @@ local function getNearestNPC()
 	return nearest
 end
 
--- 🧭 Teleport đứng phía sau NPC (an toàn, đứng yên)
-local function teleportBehind(target)
+-- 🧭 Di chuyển mượt (FakeRoot Tween)
+local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
 	local hum, root = getHumanoidAndRoot(char)
-	if not root or not hum then return end
+	if not root then return end
 	if not target then return end
 
 	local _, targetRoot = getHumanoidAndRoot(target)
 	if not targetRoot then return end
 
+	-- Tạo part giả làm điểm tween
+	local fakeRoot = Instance.new("Part")
+	fakeRoot.Anchored = true
+	fakeRoot.CanCollide = false
+	fakeRoot.Transparency = 1
+	fakeRoot.CFrame = root.CFrame
+	fakeRoot.Parent = workspace
+
+	-- Nếu quá xa → teleport nhẹ tới gần (có kiểm tra mặt đất)
 	local distance = (root.Position - targetRoot.Position).Magnitude
 	if distance > teleportDistance then
 		task.wait(teleportDelay)
+		local direction = (targetRoot.Position - root.Position).Unit
+		local safePos = targetRoot.Position - direction * teleportDistance
+		local safeY = getSafeYPosition(safePos)
+		root.CFrame = CFrame.new(Vector3.new(safePos.X, safeY, safePos.Z))
+		fakeRoot.CFrame = root.CFrame
 	end
 
-	-- vị trí đứng sau NPC theo hướng nhìn của nó
-	local behindPos = (targetRoot.CFrame * CFrame.new(0, 0, behindDistance)).Position
-	local ignoreList = { LocalPlayer.Character, target }
-	local safeY = getSafeYPosition(behindPos, ignoreList)
-	local finalPos = Vector3.new(behindPos.X, safeY, behindPos.Z)
+	-- Tween fake root tới đầu NPC
+	local targetPos = targetRoot.Position
+	local safeY = getSafeYPosition(targetPos)
+	local finalPos = Vector3.new(targetPos.X, safeY, targetPos.Z)
+	local duration = math.clamp(distance / tweenSpeed, 0.2, 3)
+	local goal = { CFrame = CFrame.new(finalPos) }
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
+	tween:Play()
 
-	-- Không dịch chuyển nếu quá gần
-	if (root.Position - finalPos).Magnitude <= 1 then return end
+	-- Trong khi tween fakeRoot → đặt nhân vật theo fakeRoot
+	task.spawn(function()
+		while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
+			root.CFrame = fakeRoot.CFrame
+			root.Velocity = Vector3.zero
+			task.wait()
+		end
+	end)
 
-	-- Không teleport nếu vị trí thấp bất thường (tránh vực)
-	if finalPos.Y < -100 then
-		warn("[AutoFarm] ⚠️ Bỏ qua teleport vì vị trí quá thấp (nguy cơ rơi).")
-		return
-	end
-
-	-- Dịch chuyển ra sau và nhìn về NPC
-	local lookAt = targetRoot.Position
-	root.CFrame = CFrame.new(finalPos, lookAt)
-	root.AssemblyLinearVelocity = Vector3.zero
-	root.Velocity = Vector3.zero
+	tween.Completed:Wait()
+	fakeRoot:Destroy()
 end
 
 -- 🔁 Auto Farm Loop
@@ -401,7 +415,7 @@ task.spawn(function()
 		if _G.AutoTween then
 			local npc = getNearestNPC()
 			if npc then
-				teleportBehind(npc)
+				tweenTo(npc)
 			end
 		end
 	end
@@ -422,7 +436,7 @@ local Toggle = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Dịch chuyển ra sau NPC, đứng yên (Safe Teleport).")
+			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover ổn định (Safe Teleport).")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -430,6 +444,19 @@ local Toggle = Tab:CreateToggle({
 		end
 	end
 })
+
+--------------------------------------------------------------------
+-- ✅ SỬA Ở ĐÂY: Load cấu hình sau cùng (đảm bảo các Toggle hiện đầy đủ)
+task.delay(2, function()
+    if Rayfield and Rayfield.LoadConfiguration then
+        pcall(function()
+            Rayfield:LoadConfiguration()
+            warn("[Rayfield] ✅ Configuration Loaded (Toggles đã hiển thị).")
+        end)
+    end
+end)
+--------------------------------------------------------------------
+
 
 
 
