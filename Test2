@@ -143,6 +143,58 @@ local Toggle = Tab:CreateToggle({
     end,
 })
 
+
+--// ⚡ Auto Overcharge (theo phong cách Auto Heal)
+_G.AutoOvercharge = false
+local running = false
+
+-- Hàm chính
+local function AutoOverchargeFunc()
+    if running then return end -- tránh chạy trùng
+    running = true
+    task.spawn(function()
+        -- Nếu có combo thì chờ hoàn tất trước khi kích hoạt
+        if _G.ComboDone == nil then _G.ComboDone = true end
+        repeat task.wait() until _G.ComboDone == true
+
+        while _G.AutoOvercharge do
+            task.wait(0)
+            local ok, err = pcall(function()
+                local args = { [1] = "17314bb0-099c-461b-afb9-01ddcad548bd" }
+                local player = game:GetService("Players").LocalPlayer
+                local skill = (player and player:FindFirstChild("Backpack") and player.Backpack:FindFirstChild("Overcharge"))
+                            or (player.Character and player.Character:FindFirstChild("Overcharge"))
+                if skill and skill:FindFirstChild("abilityEvent") then
+                    skill.abilityEvent:FireServer(unpack(args))
+                end
+            end)
+            if not ok then
+                warn("[AutoOvercharge] pcall error:", err)
+                task.wait(0.5)
+            end
+        end
+
+        running = false
+    end)
+end
+
+--// 🧩 Toggle trên GUI
+local Toggle = Tab:CreateToggle({
+    Name = "Auto Overcharge",
+    CurrentValue = false,          -- mặc định tắt
+    Flag = "Toggle_AutoOvercharge", -- Flag duy nhất để lưu
+    Callback = function(Value)
+        _G.AutoOvercharge = Value
+        if Value then
+            print("✅ Auto Overcharge ĐÃ BẬT")
+            AutoOverchargeFunc()
+        else
+            print("⛔ Auto Overcharge ĐÃ TẮT")
+        end
+    end,
+})
+
+
 -- ========= Auto Combo (1 lần) + Toggle (lưu config) =========
 -- Chèn sau Auto Heal toggle, trước Auto Farm
 
