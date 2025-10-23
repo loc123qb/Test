@@ -407,7 +407,7 @@ local function getFarthestNPC()
 	return farthest
 end
 
--- 🌀 Di chuyển mượt quanh NPC theo hình tròn
+-- 🌀 Di chuyển mượt quanh NPC theo hình tròn (sát mặt đất)
 local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -435,17 +435,33 @@ local function tweenTo(target)
 	end
 
 	-- 🔵 Tạo chuyển động hình tròn quanh NPC
-	local center = targetRoot.Position + Vector3.new(0, hoverHeight, 0)
-	local angleStep = math.rad(10) -- Mỗi bước di chuyển 10 độ
+	local center = targetRoot.Position
+	local angleStep = math.rad(10)
 	local totalSteps = math.floor(360 / 10)
 
 	for i = 1, totalSteps do
 		if not _G.AutoTween then break end
+
 		local angle = math.rad(i * 10)
 		local offsetX = math.cos(angle) * orbitRadius
 		local offsetZ = math.sin(angle) * orbitRadius
-		local targetPos = center + Vector3.new(offsetX, 0, offsetZ)
+		local horizontalPos = Vector3.new(center.X + offsetX, center.Y + 10, center.Z + offsetZ)
 
+		-- 🟤 Raycast từ trên xuống để tìm mặt đất
+		local rayOrigin = horizontalPos + Vector3.new(0, 50, 0)
+		local rayDirection = Vector3.new(0, -100, 0)
+		local raycastParams = RaycastParams.new()
+		raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+		local result = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+		local groundY = center.Y
+
+		if result and result.Position then
+			groundY = result.Position.Y + 1 -- +1 để không chạm đất
+		end
+
+		local targetPos = Vector3.new(horizontalPos.X, groundY, horizontalPos.Z)
 		local duration = orbitDuration / totalSteps
 		local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 		local tween = TweenService:Create(fakeRoot, tweenInfo, { CFrame = CFrame.new(targetPos) * CFrame.Angles(0, angle, 0) })
