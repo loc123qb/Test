@@ -304,7 +304,7 @@ local Workspace = game:GetService("Workspace")
 -- ⚙️ Cấu hình
 local tweenSpeed = 50
 local hoverHeight = 18
-local maxRange = 450
+local maxRange = 4000
 local teleportDistance = 30
 local teleportDelay = 1.5
 _G.AutoTween = false
