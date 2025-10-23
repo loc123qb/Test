@@ -293,112 +293,144 @@ end)
 -- ========= END =========
 
 
--- 🌍 Hàm tìm vị trí mặt đất an toàn (bỏ qua character và target để không raycast trúng NPC)
-local function getSafeYPosition(pos, ignoreInstances)
-    local rayOrigin = pos + Vector3.new(0, 100, 0)
-    local rayDirection = Vector3.new(0, -1000, 0)
-    local params = RaycastParams.new()
-    params.FilterDescendantsInstances = ignoreInstances or {LocalPlayer.Character}
-    params.FilterType = Enum.RaycastFilterType.Exclude
+--// 🌊 Auto Farm Hover Tween - Teleport Behind Safe Version (No Fall)
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
 
-    local result = Workspace:Raycast(rayOrigin, rayDirection, params)
-    if result and result.Position then
-        return result.Position.Y + hoverHeight
-    else
-        return pos.Y + hoverHeight
-    end
+-- ⚙️ Cấu hình
+local tweenSpeed = 70
+local hoverHeight = 18
+local maxRange = 450
+local teleportDistance = 10
+local teleportDelay = 1.5
+local behindDistance = 10 -- khoảng cách đứng sau NPC
+_G.AutoTween = false
+
+-- 🧠 Hàm tìm Humanoid + Root
+local function getHumanoidAndRoot(model)
+	if not model then return end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	local root = model:FindFirstChild("HumanoidRootPart")
+	return hum, root
 end
 
--- 🧭 Dịch chuyển ra phía sau NPC và đứng yên (sửa lỗi nhảy lên đầu)
-local function teleportBehind(target)
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum, root = getHumanoidAndRoot(char)
-    if not root or not hum then return end
-    if not target then return end
+-- 🌍 Hàm tìm vị trí mặt đất an toàn
+local function getSafeYPosition(pos, ignoreList)
+	local rayOrigin = pos + Vector3.new(0, 100, 0)
+	local rayDirection = Vector3.new(0, -1000, 0)
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = ignoreList or {LocalPlayer.Character}
+	params.FilterType = Enum.RaycastFilterType.Exclude
 
-    local _, targetRoot = getHumanoidAndRoot(target)
-    if not targetRoot then return end
-
-    -- Nếu quá xa → đợi trước khi teleport (tương tự bản cũ)
-    local distance = (root.Position - targetRoot.Position).Magnitude
-    if distance > teleportDistance then
-        task.wait(teleportDelay)
-    end
-
-    -- Tính vị trí "phía sau" dựa trên orientation của NPC (chắc chắn nằm sau lưng)
-    local behindCFrame = targetRoot.CFrame * CFrame.new(0, 0, -behindDistance)
-    local behindPos2 = Vector3.new(behindCFrame.X, behindCFrame.Y, behindCFrame.Z)
-
-    -- Raycast tìm ground, loại trừ NPC và chính character để tránh hit model của NPC
-    local ignoreList = { LocalPlayer.Character, target }
-    local safeY = getSafeYPosition(behindPos2, ignoreList)
-    local desiredPos = Vector3.new(behindPos2.X, safeY, behindPos2.Z)
-
-    -- Nếu đã ở rất gần vị trí mong muốn thì không teleport nữa (debounce)
-    if (root.Position - desiredPos).Magnitude <= 1.0 then
-        -- chỉnh lại hướng nhìn để đảm bảo đứng thẳng nhìn về NPC
-        root.CFrame = CFrame.new(root.Position, targetRoot.Position)
-        -- zero velocity để đứng yên
-        pcall(function()
-            root.AssemblyLinearVelocity = Vector3.new(0,0,0)
-            root.Velocity = Vector3.new(0,0,0)
-        end)
-        return
-    end
-
-    -- Kiểm tra an toàn: nếu vị trí quá thấp (có thể vực) thì bỏ teleport
-    if desiredPos.Y < -100 then
-        warn("[AutoFarm] Bỏ teleport: vị trí sau NPC quá thấp (nguy cơ rơi).")
-        return
-    end
-
-    -- Thực hiện teleport 1 lần rồi giữ yên
-    local finalCFrame = CFrame.new(desiredPos, targetRoot.Position) -- đứng nhìn về NPC
-    root.CFrame = finalCFrame
-    pcall(function()
-        root.AssemblyLinearVelocity = Vector3.new(0,0,0)
-        root.Velocity = Vector3.new(0,0,0)
-    end)
-
-    -- đảm bảo Humanoid đứng yên (PlatformStand đã được set bởi toggle nếu cần)
-    -- nhỏ delay để cho server sync và tránh re-teleport ngay lập tức từ vòng lặp phía sau
-    task.wait(0.2)
+	local result = Workspace:Raycast(rayOrigin, rayDirection, params)
+	if result and result.Position then
+		return result.Position.Y + hoverHeight
+	else
+		return pos.Y + hoverHeight
+	end
 end
 
+-- 🔍 Tìm NPC gần nhất
+local function getNearestNPC()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local _, root = getHumanoidAndRoot(char)
+	if not root then return end
 
-
-
-local Toggle = MiscTab:CreateToggle({
-	Name = "Auto Start",
-	CurrentValue = false,
-	Flag = "Toggle_AutoStart",
-	Callback = function(Value)
-		_G.AutoStart = Value
-
-		if _G.AutoStart then
-			warn("✅ Auto Start ĐÃ BẬT")
-
-			-- 🔁 Chạy liên tục cho đến khi tắt
-			task.spawn(function()
-            repeat task.wait() until _G.ComboDone == true
-
-				while _G.AutoStart do
-					-- ⚡ Gửi lệnh start
-					game:GetService("ReplicatedStorage").remotes.changeStartValue:FireServer()
-					warn("🔁 Auto Start đang thực thi...")
-
-					-- ⏱ Chờ 1–2 giây để tránh spam server
-					task.wait(2)
+	local nearest, shortest = nil, math.huge
+	for _, v in ipairs(workspace:GetDescendants()) do
+		if v:IsA("Model") and v ~= char then
+			local hum, hrp = getHumanoidAndRoot(v)
+			if hum and hrp and hum.Health > 0 then
+				local dist = (hrp.Position - root.Position).Magnitude
+				if dist < shortest and dist < maxRange then
+					shortest = dist
+					nearest = v
 				end
-				warn("⛔ Auto Start ĐÃ DỪNG")
-			end)
-
-		else
-			warn("⛔ Auto Start ĐÃ TẮT THỦ CÔNG")
+			end
 		end
-	end,
+	end
+	return nearest
+end
+
+-- 🧭 Teleport đứng phía sau NPC (an toàn, đứng yên)
+local function teleportBehind(target)
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum, root = getHumanoidAndRoot(char)
+	if not root or not hum then return end
+	if not target then return end
+
+	local _, targetRoot = getHumanoidAndRoot(target)
+	if not targetRoot then return end
+
+	local distance = (root.Position - targetRoot.Position).Magnitude
+	if distance > teleportDistance then
+		task.wait(teleportDelay)
+	end
+
+	-- vị trí đứng sau NPC theo hướng nhìn của nó
+	local behindPos = (targetRoot.CFrame * CFrame.new(0, 0, behindDistance)).Position
+	local ignoreList = { LocalPlayer.Character, target }
+	local safeY = getSafeYPosition(behindPos, ignoreList)
+	local finalPos = Vector3.new(behindPos.X, safeY, behindPos.Z)
+
+	-- Không dịch chuyển nếu quá gần
+	if (root.Position - finalPos).Magnitude <= 1 then return end
+
+	-- Không teleport nếu vị trí thấp bất thường (tránh vực)
+	if finalPos.Y < -100 then
+		warn("[AutoFarm] ⚠️ Bỏ qua teleport vì vị trí quá thấp (nguy cơ rơi).")
+		return
+	end
+
+	-- Dịch chuyển ra sau và nhìn về NPC
+	local lookAt = targetRoot.Position
+	root.CFrame = CFrame.new(finalPos, lookAt)
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.Velocity = Vector3.zero
+end
+
+-- 🔁 Auto Farm Loop
+task.spawn(function()
+	repeat task.wait() until _G.ComboDone == true  -- ⏳ Đợi Auto Combo hoàn tất
+
+	while task.wait(0.5) do
+		if _G.AutoTween then
+			local npc = getNearestNPC()
+			if npc then
+				teleportBehind(npc)
+			end
+		end
+	end
+end)
+
+-- 🪄 Toggle GUI
+local Toggle = Tab:CreateToggle({
+	Name = "Auto Farm",
+	CurrentValue = false,
+	Flag = "ToggleAutoFarm",
+	Callback = function(Value)
+		_G.AutoTween = Value
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum, root = getHumanoidAndRoot(char)
+		if not hum or not root then return end
+
+		if Value then
+			hum.PlatformStand = true
+			hum:ChangeState(Enum.HumanoidStateType.Physics)
+			warn("[AUTO-FARM] ✅ Đã bật: Dịch chuyển ra sau NPC, đứng yên (Safe Teleport).")
+		else
+			hum.PlatformStand = false
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			warn("[AUTO-FARM] ⛔ Đã tắt.")
+		end
+	end
 })
+
 
 
 local Toggle = MiscTab:CreateToggle({
