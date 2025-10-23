@@ -293,11 +293,10 @@ end)
 -- ========= END =========
 
 
-
-
---// 🌊 Auto Farm Hover Tween - Smooth Version (No Jitter)
+--// 🌊 Auto Farm Hover Tween - Safe Teleport Version (No Fall)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
 -- ⚙️ Cấu hình
@@ -314,6 +313,22 @@ local function getHumanoidAndRoot(model)
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	local root = model:FindFirstChild("HumanoidRootPart")
 	return hum, root
+end
+
+-- 🌍 Hàm tìm vị trí mặt đất an toàn
+local function getSafeYPosition(pos)
+	local rayOrigin = pos + Vector3.new(0, 50, 0)
+	local rayDirection = Vector3.new(0, -500, 0)
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {LocalPlayer.Character}
+	params.FilterType = Enum.RaycastFilterType.Exclude
+
+	local result = Workspace:Raycast(rayOrigin, rayDirection, params)
+	if result and result.Position then
+		return result.Position.Y + hoverHeight
+	else
+		return pos.Y + hoverHeight
+	end
 end
 
 -- 🔍 Tìm NPC gần nhất
@@ -358,20 +373,23 @@ local function tweenTo(target)
 	fakeRoot.CFrame = root.CFrame
 	fakeRoot.Parent = workspace
 
-	-- Nếu quá xa → chờ và teleport nhẹ tới gần
+	-- Nếu quá xa → teleport nhẹ tới gần (có kiểm tra mặt đất)
 	local distance = (root.Position - targetRoot.Position).Magnitude
 	if distance > teleportDistance then
 		task.wait(teleportDelay)
 		local direction = (targetRoot.Position - root.Position).Unit
 		local safePos = targetRoot.Position - direction * teleportDistance
-		root.CFrame = CFrame.new(safePos + Vector3.new(0, hoverHeight, 0))
+		local safeY = getSafeYPosition(safePos)
+		root.CFrame = CFrame.new(Vector3.new(safePos.X, safeY, safePos.Z))
 		fakeRoot.CFrame = root.CFrame
 	end
 
 	-- Tween fake root tới đầu NPC
-	local targetPos = targetRoot.Position + Vector3.new(0, hoverHeight, 0)
+	local targetPos = targetRoot.Position
+	local safeY = getSafeYPosition(targetPos)
+	local finalPos = Vector3.new(targetPos.X, safeY, targetPos.Z)
 	local duration = math.clamp(distance / tweenSpeed, 0.2, 3)
-	local goal = { CFrame = CFrame.new(targetPos) }
+	local goal = { CFrame = CFrame.new(finalPos) }
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 	local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
 	tween:Play()
@@ -391,7 +409,7 @@ end
 
 -- 🔁 Auto Farm Loop
 task.spawn(function()
-	repeat task.wait() until _G.ComboDone == true  -- ⏳ Đợi Auto Combo hoàn tất trước khi farm
+	repeat task.wait() until _G.ComboDone == true  -- ⏳ Đợi Auto Combo hoàn tất
 
 	while task.wait(0.5) do
 		if _G.AutoTween then
@@ -418,7 +436,7 @@ local Toggle = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover ổn định (no jitter).")
+			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover ổn định (Safe Teleport).")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -426,6 +444,7 @@ local Toggle = Tab:CreateToggle({
 		end
 	end
 })
+
 
 
 local Toggle = MiscTab:CreateToggle({
