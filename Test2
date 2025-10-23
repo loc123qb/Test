@@ -376,41 +376,31 @@ local function tweenTo(target)
 	fakeRoot.Parent = workspace
 
 	-- Nếu quá xa → teleport nhẹ tới gần (có kiểm tra mặt đất)
-	local distance = (root.Position - targetRoot.Position).Magnitude
-	if distance > teleportDistance then
-		task.wait(teleportDelay)
-		local direction = (targetRoot.Position - root.Position).Unit
-		local safePos = targetRoot.Position - direction * teleportDistance
-		local safeY = getSafeYPosition(safePos)
-		root.CFrame = CFrame.new(Vector3.new(safePos.X, safeY, safePos.Z))
-		fakeRoot.CFrame = root.CFrame
-	end
-
-	-- Tween fake root tới đầu NPC
-	local targetPos = targetRoot.Position
-	local safeY = getSafeYPosition(targetPos)
-	local finalPos = Vector3.new(targetPos.X, safeY, targetPos.Z)
-	local duration = math.clamp(distance / tweenSpeed, 0.2, 3)
-	local goal = { CFrame = CFrame.new(finalPos) }
-	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-	local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
-	tween:Play()
-
-	-- Trong khi tween fakeRoot → đặt nhân vật theo fakeRoot (có né skill)
-	task.spawn(function()
-		while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
-			local driftX = math.sin(tick() * dodgeSpeed) * dodgeAmplitude
-			local driftZ = math.cos(tick() * (dodgeSpeed + 0.7)) * dodgeAmplitude
-			local offset = Vector3.new(driftX, 0, driftZ)
-			root.CFrame = fakeRoot.CFrame * CFrame.new(offset)
-			root.Velocity = Vector3.zero
-			task.wait()
-		end
-	end)
-
-	tween.Completed:Wait()
-	fakeRoot:Destroy()
+local distance = (root.Position - targetRoot.Position).Magnitude
+if distance > teleportDistance then
+    task.wait(teleportDelay)
+    
+    -- Hướng từ NPC ra phía sau
+    local direction = (targetRoot.Position - root.Position).Unit
+    local backDirection = -direction  -- đảo hướng để đứng sau NPC
+    local safePos = targetRoot.Position + backDirection * teleportDistance
+    
+    local safeY = getSafeYPosition(safePos)
+    root.CFrame = CFrame.new(Vector3.new(safePos.X, safeY, safePos.Z))
+    fakeRoot.CFrame = root.CFrame
 end
+
+-- Tween fake root tới phía sau NPC
+local directionToBack = -(targetRoot.CFrame.LookVector) -- lấy hướng "sau" NPC
+local targetPos = targetRoot.Position + directionToBack * teleportDistance
+local safeY = getSafeYPosition(targetPos)
+local finalPos = Vector3.new(targetPos.X, safeY, targetPos.Z)
+local duration = math.clamp(distance / tweenSpeed, 0.2, 3)
+local goal = { CFrame = CFrame.new(finalPos) }
+local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
+tween:Play()
+
 
 -- 🔁 Auto Farm Loop
 task.spawn(function()
