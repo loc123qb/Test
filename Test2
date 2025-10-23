@@ -293,7 +293,7 @@ end)
 -- ========= END =========
 
 
---// 🌊 Auto Farm Hover Tween - Safe Teleport Version (No Fall)
+--// 🌊 Auto Farm Hover Tween - Safe Teleport + Auto Dodge
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -305,6 +305,8 @@ local hoverHeight = 18
 local maxRange = 450
 local teleportDistance = 10
 local teleportDelay = 1.5
+local dodgeAmplitude = 2      -- Biên độ né (độ dao động)
+local dodgeSpeed = 3          -- Tốc độ dao động
 _G.AutoTween = false
 
 -- 🧠 Hàm tìm Humanoid + Root
@@ -354,7 +356,7 @@ local function getNearestNPC()
 	return nearest
 end
 
--- 🧭 Di chuyển mượt (FakeRoot Tween) — GIỮ NGUYÊN, chỉ sửa vị trí dịch chuyển
+-- 🧭 Di chuyển mượt (FakeRoot Tween + Auto Dodge)
 local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -378,35 +380,29 @@ local function tweenTo(target)
 	if distance > teleportDistance then
 		task.wait(teleportDelay)
 		local direction = (targetRoot.Position - root.Position).Unit
-
-		-- 🧩 Sửa: dịch chuyển đến phía sau NPC thay vì ngay trên đầu
-		local backOffset = -targetRoot.CFrame.LookVector * 8 -- đứng cách sau 8 stud
-		local safePos = targetRoot.Position + backOffset
+		local safePos = targetRoot.Position - direction * teleportDistance
 		local safeY = getSafeYPosition(safePos)
-
-		root.CFrame = CFrame.new(Vector3.new(safePos.X, safeY, safePos.Z), targetRoot.Position)
+		root.CFrame = CFrame.new(Vector3.new(safePos.X, safeY, safePos.Z))
 		fakeRoot.CFrame = root.CFrame
 	end
 
-	-- 🧩 Sửa: điểm đến nằm phía sau NPC, cùng hướng nhìn
-	local backOffset = -targetRoot.CFrame.LookVector * 8
-	local targetPos = targetRoot.Position + backOffset
+	-- Tween fake root tới đầu NPC
+	local targetPos = targetRoot.Position
 	local safeY = getSafeYPosition(targetPos)
-
-	-- 🧩 Sửa: giảm hiệu ứng “nhấp nhô” → không hover động
 	local finalPos = Vector3.new(targetPos.X, safeY, targetPos.Z)
-	local finalCFrame = CFrame.new(finalPos, targetRoot.Position)
-
 	local duration = math.clamp(distance / tweenSpeed, 0.2, 3)
-	local goal = { CFrame = finalCFrame }
+	local goal = { CFrame = CFrame.new(finalPos) }
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 	local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
 	tween:Play()
 
-	-- Trong khi tween fakeRoot → đặt nhân vật theo fakeRoot
+	-- Trong khi tween fakeRoot → đặt nhân vật theo fakeRoot (có né skill)
 	task.spawn(function()
 		while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
-			root.CFrame = fakeRoot.CFrame
+			local driftX = math.sin(tick() * dodgeSpeed) * dodgeAmplitude
+			local driftZ = math.cos(tick() * (dodgeSpeed + 0.7)) * dodgeAmplitude
+			local offset = Vector3.new(driftX, 0, driftZ)
+			root.CFrame = fakeRoot.CFrame * CFrame.new(offset)
 			root.Velocity = Vector3.zero
 			task.wait()
 		end
@@ -415,7 +411,6 @@ local function tweenTo(target)
 	tween.Completed:Wait()
 	fakeRoot:Destroy()
 end
-
 
 -- 🔁 Auto Farm Loop
 task.spawn(function()
@@ -446,6 +441,31 @@ local Toggle = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
+			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover + auto dodge né kỹ năng.")
+		else
+			hum.PlatformStand = false
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			warn("[AUTO-FARM] ⛔ Đã tắt.")
+		end
+	end
+})
+
+
+-- 🪄 Toggle GUI
+local Toggle = Tab:CreateToggle({
+	Name = "Auto Farm",
+	CurrentValue = false,
+	Flag = "ToggleAutoFarm",
+	Callback = function(Value)
+		_G.AutoTween = Value
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum, root = getHumanoidAndRoot(char)
+		if not hum or not root then return end
+
+		if Value then
+			hum.PlatformStand = true
+			hum:ChangeState(Enum.HumanoidStateType.Physics)
 			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover ổn định (Safe Teleport).")
 		else
 			hum.PlatformStand = false
@@ -455,19 +475,38 @@ local Toggle = Tab:CreateToggle({
 	end
 })
 
---------------------------------------------------------------------
--- ✅ SỬA Ở ĐÂY: Load cấu hình sau cùng (đảm bảo các Toggle hiện đầy đủ)
-task.delay(2, function()
-    if Rayfield and Rayfield.LoadConfiguration then
-        pcall(function()
-            Rayfield:LoadConfiguration()
-            warn("[Rayfield] ✅ Configuration Loaded (Toggles đã hiển thị).")
-        end)
-    end
-end)
---------------------------------------------------------------------
 
 
+local Toggle = MiscTab:CreateToggle({
+	Name = "Auto Start",
+	CurrentValue = false,
+	Flag = "Toggle_AutoStart",
+	Callback = function(Value)
+		_G.AutoStart = Value
+
+		if _G.AutoStart then
+			warn("✅ Auto Start ĐÃ BẬT")
+
+			-- 🔁 Chạy liên tục cho đến khi tắt
+			task.spawn(function()
+            repeat task.wait() until _G.ComboDone == true
+
+				while _G.AutoStart do
+					-- ⚡ Gửi lệnh start
+					game:GetService("ReplicatedStorage").remotes.changeStartValue:FireServer()
+					warn("🔁 Auto Start đang thực thi...")
+
+					-- ⏱ Chờ 1–2 giây để tránh spam server
+					task.wait(2)
+				end
+				warn("⛔ Auto Start ĐÃ DỪNG")
+			end)
+
+		else
+			warn("⛔ Auto Start ĐÃ TẮT THỦ CÔNG")
+		end
+	end,
+})
 
 
 local Toggle = MiscTab:CreateToggle({
