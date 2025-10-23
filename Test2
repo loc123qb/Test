@@ -451,32 +451,6 @@ local Toggle = Tab:CreateToggle({
 })
 
 
--- 🪄 Toggle GUI
-local Toggle = Tab:CreateToggle({
-	Name = "Auto Farm",
-	CurrentValue = false,
-	Flag = "ToggleAutoFarm",
-	Callback = function(Value)
-		_G.AutoTween = Value
-		local char = LocalPlayer.Character
-		if not char then return end
-		local hum, root = getHumanoidAndRoot(char)
-		if not hum or not root then return end
-
-		if Value then
-			hum.PlatformStand = true
-			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover ổn định (Safe Teleport).")
-		else
-			hum.PlatformStand = false
-			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-			warn("[AUTO-FARM] ⛔ Đã tắt.")
-		end
-	end
-})
-
-
-
 local Toggle = MiscTab:CreateToggle({
 	Name = "Auto Start",
 	CurrentValue = false,
