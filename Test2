@@ -300,11 +300,11 @@ local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 70
-local hoverHeight = 18
-local maxRange = 450
-local teleportDistance = 10
-local teleportDelay = 1.5
+local tweenSpeed = 30
+local hoverHeight = 10
+local maxRange = 1000
+local teleportDistance = 30
+local teleportDelay = 1
 _G.AutoTween = false
 
 -- 🧠 Hàm tìm Humanoid + Root
