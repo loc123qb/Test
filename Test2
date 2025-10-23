@@ -295,7 +295,7 @@ end)
 
 
 
---// 🌊 Auto Farm Hover Tween - Smooth Version (Only NPC) + Fast Smooth Auto Dodge
+--// 🌊 Auto Farm Hover Tween - Smooth Version (Group Center Teleport + Auto Dodge)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -307,12 +307,12 @@ local tweenSpeed = 50
 local hoverHeight = 10
 local maxRange = 4000
 local teleportDistance = 30
-local teleportDelay = 1.5
+local teleportDelay = 1.2
 _G.AutoTween = false
-_G.AutoDodge = true -- 🛡️ Bật/tắt né kỹ năng
-local dodgeDistance = 18 -- khoảng né sang trái/phải (tăng nhẹ)
-local dodgeCooldown = 0.7 -- thời gian nghỉ giữa 2 lần né (phản ứng nhanh hơn)
-local dodgeDetectRange = 30 -- khoảng phát hiện kỹ năng gần
+_G.AutoDodge = true
+local dodgeDistance = 18
+local dodgeCooldown = 0.7
+local groupRadius = 80 -- 🧭 bán kính gom nhóm NPC để tính trung tâm
 
 -- 🧠 Hàm tìm Humanoid + Root
 local function getHumanoidAndRoot(model)
@@ -332,40 +332,50 @@ local function isPlayerModel(model)
     return false
 end
 
--- 🔍 Tìm NPC gần nhất (loại bỏ người chơi)
-local function getNearestNPC()
+-- 🔍 Tìm các NPC gần nhất (gom theo vùng)
+local function getNearbyNPCs()
     local char = LocalPlayer.Character
-    if not char then return end
+    if not char then return {} end
     local _, root = getHumanoidAndRoot(char)
-    if not root then return end
+    if not root then return {} end
 
-    local nearest, shortest = nil, math.huge
+    local nearby = {}
 
     for _, v in ipairs(Workspace:GetDescendants()) do
         if v:IsA("Model") and v ~= char then
             local hum, hrp = getHumanoidAndRoot(v)
             if hum and hrp and hum.Health > 0 and not isPlayerModel(v) then
                 local dist = (hrp.Position - root.Position).Magnitude
-                if dist < shortest and dist < maxRange then
-                    shortest = dist
-                    nearest = v
+                if dist < groupRadius then
+                    table.insert(nearby, hrp.Position)
                 end
             end
         end
     end
-    return nearest
+    return nearby
 end
 
--- 🧭 Di chuyển mượt (FakeRoot Tween)
-local function tweenTo(target)
+-- 🧮 Tính trung tâm các NPC gần nhau
+local function getGroupCenter()
+    local positions = getNearbyNPCs()
+    if #positions == 0 then return nil end
+    local sum = Vector3.zero
+    for _, pos in ipairs(positions) do
+        sum += pos
+    end
+    local center = sum / #positions
+    return center
+end
+
+-- 🧭 Tween mượt tới vị trí trung tâm nhóm NPC
+local function tweenToCenter()
     local char = LocalPlayer.Character
     if not char then return end
     local hum, root = getHumanoidAndRoot(char)
     if not root then return end
-    if not target then return end
 
-    local _, targetRoot = getHumanoidAndRoot(target)
-    if not targetRoot then return end
+    local centerPos = getGroupCenter()
+    if not centerPos then return end
 
     local fakeRoot = Instance.new("Part")
     fakeRoot.Anchored = true
@@ -374,17 +384,17 @@ local function tweenTo(target)
     fakeRoot.CFrame = root.CFrame
     fakeRoot.Parent = Workspace
 
-    local distance = (root.Position - targetRoot.Position).Magnitude
+    local distance = (root.Position - centerPos).Magnitude
     if distance > teleportDistance then
         task.wait(teleportDelay)
-        local direction = (targetRoot.Position - root.Position).Unit
-        local safePos = targetRoot.Position - direction * teleportDistance
+        local direction = (centerPos - root.Position).Unit
+        local safePos = centerPos - direction * teleportDistance
         root.CFrame = CFrame.new(safePos + Vector3.new(0, hoverHeight, 0))
         fakeRoot.CFrame = root.CFrame
     end
 
-    local targetPos = targetRoot.Position + Vector3.new(0, hoverHeight, 0)
-    local duration = math.clamp(distance / tweenSpeed, 0.2, 2.2)
+    local targetPos = centerPos + Vector3.new(0, hoverHeight, 0)
+    local duration = math.clamp(distance / tweenSpeed, 0.15, 2)
     local goal = { CFrame = CFrame.new(targetPos) }
     local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
     local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
@@ -402,7 +412,7 @@ local function tweenTo(target)
     fakeRoot:Destroy()
 end
 
--- ⚡ Auto Dodge Skill (Tween-based)
+-- ⚡ Auto Dodge Skill
 local lastDodge = 0
 local isDodging = false
 local function autoDodge()
@@ -419,12 +429,12 @@ local function autoDodge()
             local n = v.Name:lower()
             if n:find("hit") or n:find("attack") or n:find("projectile") or n:find("skill") or n:find("effect") then
                 local dist = (v.Position - root.Position).Magnitude
-                if dist < dodgeDetectRange then
+                if dist < 28 then
                     isDodging = true
                     lastDodge = tick()
 
                     local side = math.random(0, 1) == 0 and -1 or 1
-                    local dodgeDir = root.CFrame.RightVector * side * dodgeDistance
+                    local dodgeDir = root.CFrame.RightVector * side * 18
                     local newPos = root.Position + dodgeDir + Vector3.new(0, 1.5, 0)
 
                     local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -433,7 +443,6 @@ local function autoDodge()
                     tween.Completed:Connect(function()
                         isDodging = false
                     end)
-
                     break
                 end
             end
@@ -447,18 +456,15 @@ task.spawn(function()
 
     while task.wait(0.25) do
         if _G.AutoTween then
-            autoDodge() -- ⛩️ Né kỹ năng nhanh mượt
-            local npc = getNearestNPC()
-            if npc then
-                tweenTo(npc)
-            end
+            autoDodge()
+            tweenToCenter() -- 🧲 di chuyển tới trung tâm nhóm NPC
         end
     end
 end)
 
 -- 🪄 Toggle GUI
 local Toggle = Tab:CreateToggle({
-    Name = "Auto Farm (NPC Only)",
+    Name = "Auto Farm (Group Center)",
     CurrentValue = false,
     Flag = "ToggleAutoFarm",
     Callback = function(Value)
@@ -471,7 +477,7 @@ local Toggle = Tab:CreateToggle({
         if Value then
             hum.PlatformStand = true
             hum:ChangeState(Enum.HumanoidStateType.Physics)
-            warn("[AUTO-FARM] ✅ Đã bật: Chỉ teleport vào NPC, bỏ qua người chơi.")
+            warn("[AUTO-FARM] ✅ Đã bật: Teleport ở giữa nhóm NPC, bỏ qua người chơi.")
         else
             hum.PlatformStand = false
             hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -479,6 +485,7 @@ local Toggle = Tab:CreateToggle({
         end
     end
 })
+
 
 
 
