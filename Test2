@@ -293,8 +293,6 @@ end)
 -- ========= END =========
 
 
-
-
 --// 🌊 Auto Farm Hover Tween - Safe Teleport Version (No Fall)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
@@ -400,7 +398,52 @@ local function tweenTo(target)
 	task.spawn(function()
 		while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
 			root.CFrame = fakeRoot.CFrame
-			root.Velocity = Vector3.ze
+			root.Velocity = Vector3.zero
+			task.wait()
+		end
+	end)
+
+	tween.Completed:Wait()
+	fakeRoot:Destroy()
+end
+
+-- 🔁 Auto Farm Loop
+task.spawn(function()
+	repeat task.wait() until _G.ComboDone == true  -- ⏳ Đợi Auto Combo hoàn tất
+
+	while task.wait(0.5) do
+		if _G.AutoTween then
+			local npc = getNearestNPC()
+			if npc then
+				tweenTo(npc)
+			end
+		end
+	end
+end)
+
+-- 🪄 Toggle GUI
+local Toggle = Tab:CreateToggle({
+	Name = "Auto Farm",
+	CurrentValue = false,
+	Flag = "ToggleAutoFarm",
+	Callback = function(Value)
+		_G.AutoTween = Value
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum, root = getHumanoidAndRoot(char)
+		if not hum or not root then return end
+
+		if Value then
+			hum.PlatformStand = true
+			hum:ChangeState(Enum.HumanoidStateType.Physics)
+			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover ổn định (Safe Teleport).")
+		else
+			hum.PlatformStand = false
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			warn("[AUTO-FARM] ⛔ Đã tắt.")
+		end
+	end
+})
 
 
 
