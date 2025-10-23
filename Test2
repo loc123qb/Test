@@ -293,7 +293,7 @@ end)
 -- ========= END =========
 
 
---// 🌊 Auto Farm Hover Tween - Safe Teleport + Auto Dodge
+--// 🌊 Auto Farm Hover Tween - Safe Teleport + Auto Dodge (Stable Version)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -305,8 +305,8 @@ local hoverHeight = 18
 local maxRange = 450
 local teleportDistance = 10
 local teleportDelay = 1.5
-local dodgeAmplitude = 2      -- Biên độ né (độ dao động)
-local dodgeSpeed = 3          -- Tốc độ dao động
+local dodgeAmplitude = 2      -- Biên độ né
+local dodgeSpeed = 3          -- Tốc độ né
 _G.AutoTween = false
 
 -- 🧠 Hàm tìm Humanoid + Root
@@ -319,8 +319,8 @@ end
 
 -- 🌍 Hàm tìm vị trí mặt đất an toàn
 local function getSafeYPosition(pos)
-	local rayOrigin = pos + Vector3.new(0, 50, 0)
-	local rayDirection = Vector3.new(0, -500, 0)
+	local rayOrigin = pos + Vector3.new(0, 100, 0)
+	local rayDirection = Vector3.new(0, -1000, 0)
 	local params = RaycastParams.new()
 	params.FilterDescendantsInstances = {LocalPlayer.Character}
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -329,6 +329,7 @@ local function getSafeYPosition(pos)
 	if result and result.Position then
 		return result.Position.Y + hoverHeight
 	else
+		-- Nếu không có mặt đất, giữ nguyên độ cao hiện tại để tránh rơi
 		return pos.Y + hoverHeight
 	end
 end
@@ -356,7 +357,7 @@ local function getNearestNPC()
 	return nearest
 end
 
--- 🧭 Di chuyển mượt (FakeRoot Tween + Auto Dodge)
+-- 🧭 Di chuyển mượt (Tween + Né + Safe Teleport)
 local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -386,24 +387,41 @@ local function tweenTo(target)
 		fakeRoot.CFrame = root.CFrame
 	end
 
-	-- Tween fake root tới đầu NPC
+	-- Xác định vị trí đến có mặt đất an toàn
 	local targetPos = targetRoot.Position
 	local safeY = getSafeYPosition(targetPos)
 	local finalPos = Vector3.new(targetPos.X, safeY, targetPos.Z)
+
+	-- Nếu vị trí đến quá thấp (dưới map) → bỏ qua
+	if safeY < -50 then
+		warn("[AUTO-FARM] ⚠️ Bỏ qua mục tiêu vì vị trí quá thấp (có thể rơi vực).")
+		fakeRoot:Destroy()
+		return
+	end
+
+	-- Tween fake root tới NPC
 	local duration = math.clamp(distance / tweenSpeed, 0.2, 3)
 	local goal = { CFrame = CFrame.new(finalPos) }
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 	local tween = TweenService:Create(fakeRoot, tweenInfo, goal)
 	tween:Play()
 
-	-- Trong khi tween fakeRoot → đặt nhân vật theo fakeRoot (có né skill)
+	-- Trong khi tween → cập nhật vị trí + né đòn
 	task.spawn(function()
 		while tween.PlaybackState == Enum.PlaybackState.Playing and _G.AutoTween do
 			local driftX = math.sin(tick() * dodgeSpeed) * dodgeAmplitude
 			local driftZ = math.cos(tick() * (dodgeSpeed + 0.7)) * dodgeAmplitude
 			local offset = Vector3.new(driftX, 0, driftZ)
+
 			root.CFrame = fakeRoot.CFrame * CFrame.new(offset)
 			root.Velocity = Vector3.zero
+
+			-- Kiểm tra liên tục nếu đang ở gần vực → nâng nhẹ
+			local currentY = getSafeYPosition(root.Position)
+			if root.Position.Y < currentY - 10 then
+				root.CFrame = CFrame.new(root.Position.X, currentY, root.Position.Z)
+			end
+
 			task.wait()
 		end
 	end)
@@ -414,7 +432,7 @@ end
 
 -- 🔁 Auto Farm Loop
 task.spawn(function()
-	repeat task.wait() until _G.ComboDone == true  -- ⏳ Đợi Auto Combo hoàn tất
+	repeat task.wait() until _G.ComboDone == true  -- Đợi Auto Combo hoàn tất
 
 	while task.wait(0.5) do
 		if _G.AutoTween then
@@ -441,7 +459,7 @@ local Toggle = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover + auto dodge né kỹ năng.")
+			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt, hover ổn định, tránh rơi vực.")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
