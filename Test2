@@ -622,6 +622,7 @@ local ToggleRedZone = Tab:CreateToggle({
 
 
 
+
 local Toggle = MiscTab:CreateToggle({
 	Name = "Auto Start",
 	CurrentValue = false,
