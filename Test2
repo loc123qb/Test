@@ -344,7 +344,7 @@ task.defer(function()
 end)
 -- ========= END =========
 
---// 🌊 Auto Farm Hover Tween - Smooth Circle Around NPC + Smooth Auto Dodge + Red Zone Avoidance + Hitbox Adjust
+--// 🌊 Auto Farm Hover Tween - Circle Behind NPC + Smooth Auto Dodge + Red Zone Toggle
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -354,12 +354,12 @@ local RunService = game:GetService("RunService")
 -- ⚙️ Cấu hình
 local tweenSpeed = 15
 local hoverHeight = 0
-local hitboxOffsetY = -2.5 -- 🔽 Hạ nhân vật xuống 1 chút để vừa tầm hitbox của quái
 local maxRange = 4000
 local teleportDistance = 0
 local teleportDelay = 0
 _G.AutoTween = false
 _G.AutoDodge = true
+_G.AutoRedZoneDodge = true -- ✅ Thêm biến điều khiển riêng
 local dodgeDistance = 18
 local dodgeCooldown = 0.7
 local dodgeDetectRange = 30
@@ -408,7 +408,7 @@ local function getFarthestNPC()
 	return farthest
 end
 
--- 🌍 Lấy vị trí sát mặt đất
+-- 🌍 Căn vị trí sát mặt đất
 local function getGroundY(pos)
 	local ray = Ray.new(pos + Vector3.new(0, 10, 0), Vector3.new(0, -groundRayLength, 0))
 	local hit, hitPos = Workspace:FindPartOnRay(ray)
@@ -418,7 +418,7 @@ local function getGroundY(pos)
 	return pos.Y
 end
 
--- 🌀 Di chuyển quanh NPC sát mặt đất + hạ thấp vị trí tấn công
+-- 🌀 Di chuyển mượt quanh phía sau lưng NPC, sát mặt đất
 local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -436,25 +436,32 @@ local function tweenTo(target)
 	fakeRoot.CFrame = root.CFrame
 	fakeRoot.Parent = Workspace
 
+	local npcLook = targetRoot.CFrame.LookVector
 	local center = targetRoot.Position
+	local backOffset = 8
+	local backPos = center - npcLook * backOffset
+
 	local angleStep = math.rad(10)
 	local totalSteps = math.floor(360 / 10)
-
-	-- ✅ Khi vừa teleport đến NPC thì hạ thấp nhân vật xuống một chút
-	local baseY = getGroundY(center) + hoverHeight + hitboxOffsetY
-	root.CFrame = CFrame.new(center.X, baseY, center.Z)
 
 	for i = 1, totalSteps do
 		if not _G.AutoTween then break end
 		local angle = math.rad(i * 10)
+		
 		local offsetX = math.cos(angle) * orbitRadius
 		local offsetZ = math.sin(angle) * orbitRadius
-		local groundY = getGroundY(center) + hoverHeight + hitboxOffsetY
-		local targetPos = Vector3.new(center.X + offsetX, groundY, center.Z + offsetZ)
+
+		local targetPos = Vector3.new(
+			backPos.X + offsetX,
+			getGroundY(backPos) + hoverHeight,
+			backPos.Z + offsetZ
+		)
 
 		local duration = orbitDuration / totalSteps
 		local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-		local tween = TweenService:Create(fakeRoot, tweenInfo, { CFrame = CFrame.new(targetPos) * CFrame.Angles(0, angle, 0) })
+		local tween = TweenService:Create(fakeRoot, tweenInfo, {
+			CFrame = CFrame.new(targetPos, center)
+		})
 		tween:Play()
 
 		task.spawn(function()
@@ -509,7 +516,7 @@ local function autoDodge()
 	end
 end
 
--- ⚠️ Auto Dodge Vùng Đỏ (AOE warning)
+-- ⚠️ Auto Dodge vùng đỏ (AOE warning)
 local activeZoneDodge = false
 local detectedZones = {}
 
@@ -530,6 +537,7 @@ local function isDangerZone(part)
 end
 
 local function moveAwayFrom(pos)
+	if not _G.AutoRedZoneDodge then return end -- ✅ Kiểm tra bật/tắt
 	if activeZoneDodge then return end
 	activeZoneDodge = true
 
@@ -539,8 +547,8 @@ local function moveAwayFrom(pos)
 	if not root then return end
 
 	local dir = (root.Position - pos).Unit
-	local safePos = root.Position + dir * 25 + Vector3.new(0, hitboxOffsetY, 0)
-	safePos = Vector3.new(safePos.X, getGroundY(safePos) + hoverHeight + hitboxOffsetY, safePos.Z)
+	local safePos = root.Position + dir * 25 + Vector3.new(0, hoverHeight, 0)
+	safePos = Vector3.new(safePos.X, getGroundY(safePos), safePos.Z)
 
 	local tweenInfo = TweenInfo.new(0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(safePos) })
@@ -553,13 +561,16 @@ end
 Workspace.DescendantAdded:Connect(function(obj)
 	if isDangerZone(obj) and not detectedZones[obj] then
 		detectedZones[obj] = true
+
 		task.defer(function()
+			if not _G.AutoRedZoneDodge then return end -- ✅ Kiểm tra toggle
 			local char = LocalPlayer.Character
 			if not char then return end
 			local _, root = getHumanoidAndRoot(char)
 			if not root then return end
 			local size = obj.Size
 			local dist = (root.Position - obj.Position).Magnitude
+
 			if dist < (math.max(size.X, size.Z) / 2) + 3 then
 				moveAwayFrom(obj.Position)
 			end
@@ -570,6 +581,7 @@ end)
 -- 🔁 Auto Farm Loop
 task.spawn(function()
 	repeat task.wait() until _G.ComboDone == true
+
 	while task.wait(0.25) do
 		if _G.AutoTween then
 			autoDodge()
@@ -582,8 +594,8 @@ task.spawn(function()
 end)
 
 -- 🪄 Toggle GUI
-local Toggle = Tab:CreateToggle({
-	Name = "Auto Farm (Circle + Red Zone Dodge)",
+local ToggleFarm = Tab:CreateToggle({
+	Name = "Auto Farm (Circle Behind)",
 	CurrentValue = false,
 	Flag = "ToggleAutoFarm",
 	Callback = function(Value)
@@ -596,7 +608,7 @@ local Toggle = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Di chuyển quanh NPC + Né vùng đỏ tự động + Canh tầm đánh.")
+			warn("[AUTO-FARM] ✅ Đã bật: Di chuyển quanh sau lưng NPC.")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -604,6 +616,22 @@ local Toggle = Tab:CreateToggle({
 		end
 	end
 })
+
+-- ✅ Toggle né vùng đỏ riêng
+local ToggleRedZone = Tab:CreateToggle({
+	Name = "Auto Dodge Red Zone (AOE)",
+	CurrentValue = true,
+	Flag = "ToggleRedZoneDodge",
+	Callback = function(Value)
+		_G.AutoRedZoneDodge = Value
+		if Value then
+			warn("[AUTO-DODGE] ✅ Đã bật: Né vùng đỏ tự động.")
+		else
+			warn("[AUTO-DODGE] ⛔ Đã tắt né vùng đỏ.")
+		end
+	end
+})
+
 
 
 local Toggle = MiscTab:CreateToggle({
