@@ -344,7 +344,7 @@ task.defer(function()
 end)
 -- ========= END =========
 
---// 🌊 Auto Farm Hover Tween - Smooth Circle Around NPC + Smooth Auto Dodge + Red Zone Avoidance
+--// 🌊 Auto Farm Hover Tween - Smooth Circle Around NPC + Smooth Auto Dodge + Red Zone Avoidance + Hitbox Adjust
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -354,6 +354,7 @@ local RunService = game:GetService("RunService")
 -- ⚙️ Cấu hình
 local tweenSpeed = 15
 local hoverHeight = 0
+local hitboxOffsetY = -2.5 -- 🔽 Hạ nhân vật xuống 1 chút để vừa tầm hitbox của quái
 local maxRange = 4000
 local teleportDistance = 0
 local teleportDelay = 0
@@ -407,7 +408,7 @@ local function getFarthestNPC()
 	return farthest
 end
 
--- 🌍 Căn vị trí sát mặt đất
+-- 🌍 Lấy vị trí sát mặt đất
 local function getGroundY(pos)
 	local ray = Ray.new(pos + Vector3.new(0, 10, 0), Vector3.new(0, -groundRayLength, 0))
 	local hit, hitPos = Workspace:FindPartOnRay(ray)
@@ -417,7 +418,7 @@ local function getGroundY(pos)
 	return pos.Y
 end
 
--- 🌀 Di chuyển mượt quanh NPC theo hình tròn (sát mặt đất)
+-- 🌀 Di chuyển quanh NPC sát mặt đất + hạ thấp vị trí tấn công
 local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -439,13 +440,17 @@ local function tweenTo(target)
 	local angleStep = math.rad(10)
 	local totalSteps = math.floor(360 / 10)
 
+	-- ✅ Khi vừa teleport đến NPC thì hạ thấp nhân vật xuống một chút
+	local baseY = getGroundY(center) + hoverHeight + hitboxOffsetY
+	root.CFrame = CFrame.new(center.X, baseY, center.Z)
+
 	for i = 1, totalSteps do
 		if not _G.AutoTween then break end
 		local angle = math.rad(i * 10)
 		local offsetX = math.cos(angle) * orbitRadius
 		local offsetZ = math.sin(angle) * orbitRadius
-
-		local targetPos = Vector3.new(center.X + offsetX, getGroundY(center) + hoverHeight, center.Z + offsetZ)
+		local groundY = getGroundY(center) + hoverHeight + hitboxOffsetY
+		local targetPos = Vector3.new(center.X + offsetX, groundY, center.Z + offsetZ)
 
 		local duration = orbitDuration / totalSteps
 		local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
@@ -534,8 +539,8 @@ local function moveAwayFrom(pos)
 	if not root then return end
 
 	local dir = (root.Position - pos).Unit
-	local safePos = root.Position + dir * 25 + Vector3.new(0, hoverHeight, 0)
-	safePos = Vector3.new(safePos.X, getGroundY(safePos), safePos.Z)
+	local safePos = root.Position + dir * 25 + Vector3.new(0, hitboxOffsetY, 0)
+	safePos = Vector3.new(safePos.X, getGroundY(safePos) + hoverHeight + hitboxOffsetY, safePos.Z)
 
 	local tweenInfo = TweenInfo.new(0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(safePos) })
@@ -548,7 +553,6 @@ end
 Workspace.DescendantAdded:Connect(function(obj)
 	if isDangerZone(obj) and not detectedZones[obj] then
 		detectedZones[obj] = true
-
 		task.defer(function()
 			local char = LocalPlayer.Character
 			if not char then return end
@@ -556,7 +560,6 @@ Workspace.DescendantAdded:Connect(function(obj)
 			if not root then return end
 			local size = obj.Size
 			local dist = (root.Position - obj.Position).Magnitude
-
 			if dist < (math.max(size.X, size.Z) / 2) + 3 then
 				moveAwayFrom(obj.Position)
 			end
@@ -567,7 +570,6 @@ end)
 -- 🔁 Auto Farm Loop
 task.spawn(function()
 	repeat task.wait() until _G.ComboDone == true
-
 	while task.wait(0.25) do
 		if _G.AutoTween then
 			autoDodge()
@@ -594,7 +596,7 @@ local Toggle = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Di chuyển quanh NPC + Né vùng đỏ tự động.")
+			warn("[AUTO-FARM] ✅ Đã bật: Di chuyển quanh NPC + Né vùng đỏ tự động + Canh tầm đánh.")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -602,8 +604,6 @@ local Toggle = Tab:CreateToggle({
 		end
 	end
 })
-
-
 
 
 local Toggle = MiscTab:CreateToggle({
