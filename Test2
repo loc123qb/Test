@@ -345,87 +345,133 @@ end)
 -- ========= END =========
 
 
---// 🌊 Auto Farm Hover + Safe Dodge (vùng đỏ) - Smooth Version
+--// ⚔️ Dungeon Quest - Auto Farm Behind NPC + Auto Dodge Zone Integration (Rayfield)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 70
-local hoverHeight = 8
-local maxRange = 450
+local tweenSpeed = 14
+local hoverHeight = 0
+local maxRange = 4000
+_G.AutoTween = false
+_G.AutoRedZoneDodge = false
+
+local orbitRadius = 12
+local orbitDuration = 3.5
 local backOffset = 8
-local waitBetweenTeleports = 2
+local groundRayLength = 120
+local dodgeBackDistance = 8
 
--- 🌐 Auto Toggle
-_G.AutoFarm = _G.AutoFarm or false
-_G.AutoRedZoneDodge = _G.AutoRedZoneDodge or false
-
--- 📦 Hàm tiện ích
+-- 🧠 Lấy Humanoid & Root
 local function getHumanoidAndRoot(model)
-	if model and model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart") then
-		return model.Humanoid, model.HumanoidRootPart
-	end
-	return nil, nil
+	if not model then return end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso")
+	return hum, root
 end
 
-local function getGroundY(pos)
-	local ray = Ray.new(pos + Vector3.new(0, 100, 0), Vector3.new(0, -300, 0))
-	local part, position = Workspace:FindPartOnRay(ray)
-	if part then return position.Y else return pos.Y end
-end
-
-local function getNearestNPC()
-	local closest, dist = nil, math.huge
-	for _, npc in ipairs(Workspace:GetChildren()) do
-		local hum, root = getHumanoidAndRoot(npc)
-		if hum and root and hum.Health > 0 and (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude < maxRange then
-			local d = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-			if d < dist then
-				dist = d
-				closest = npc
-			end
+-- 🧩 Bỏ qua người chơi
+local function isPlayerModel(model)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Character == model then
+			return true
 		end
 	end
-	return closest
+	return false
 end
 
-local function tweenToPosition(pos)
+-- 🔍 Tìm NPC xa nhất
+local function getFarthestNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
-	local hum, root = getHumanoidAndRoot(char)
+	local _, root = getHumanoidAndRoot(char)
 	if not root then return end
 
-	local targetCF = CFrame.new(pos)
-	local distance = (root.Position - pos).Magnitude
-	local duration = math.clamp(distance / tweenSpeed, 0.5, 2)
-
-	local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { CFrame = targetCF })
-	tween:Play()
-	tween.Completed:Wait()
-end
-
--- ⚔️ AutoFarm chính
-task.spawn(function()
-	while task.wait(waitBetweenTeleports) do
-		if _G.AutoFarm then
-			local npc = getNearestNPC()
-			if npc then
-				local _, npcRoot = getHumanoidAndRoot(npc)
-				if npcRoot then
-					-- Điểm ra sau NPC
-					local backPos = npcRoot.Position - npcRoot.CFrame.LookVector * backOffset
-					local safeY = getGroundY(backPos)
-					local finalPos = Vector3.new(backPos.X, safeY + hoverHeight, backPos.Z)
-					tweenToPosition(finalPos)
+	local farthest, longest = nil, 0
+	for _, v in ipairs(Workspace:GetDescendants()) do
+		if v:IsA("Model") and v ~= char then
+			local hum, hrp = getHumanoidAndRoot(v)
+			if hum and hrp and hum.Health > 0 and not isPlayerModel(v) then
+				local dist = (hrp.Position - root.Position).Magnitude
+				if dist > longest and dist < maxRange then
+					longest = dist
+					farthest = v
 				end
 			end
 		end
 	end
-end)
+	return farthest
+end
 
--- ⚠️ Né vùng đỏ (AOE) - Dịch chuyển ra phía sau quái
+-- 🌍 Lấy tọa độ sát mặt đất
+local function getGroundY(pos)
+	local ray = Ray.new(pos + Vector3.new(0, 5, 0), Vector3.new(0, -groundRayLength, 0))
+	local hit, hitPos = Workspace:FindPartOnRay(ray)
+	if hit then
+		return hitPos.Y
+	end
+	return pos.Y
+end
+
+-- 🌀 Di chuyển quanh phía sau NPC (rất mượt & không kick)
+local function tweenTo(target)
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum, root = getHumanoidAndRoot(char)
+	if not root or not target then return end
+
+	local _, targetRoot = getHumanoidAndRoot(target)
+	if not targetRoot then return end
+
+	local npcLook = targetRoot.CFrame.LookVector
+	local center = targetRoot.Position
+	local backPos = center - npcLook * backOffset
+
+	local fakeRoot = Instance.new("Part")
+	fakeRoot.Anchored = true
+	fakeRoot.CanCollide = false
+	fakeRoot.Transparency = 1
+	fakeRoot.CFrame = root.CFrame
+	fakeRoot.Parent = Workspace
+
+	local steps = 36
+	local stepTime = orbitDuration / steps
+
+	for i = 1, steps do
+		if not _G.AutoTween then break end
+
+		local angle = math.rad(i * (360 / steps))
+		local offsetX = math.cos(angle) * orbitRadius
+		local offsetZ = math.sin(angle) * orbitRadius
+		local targetPos = Vector3.new(
+			backPos.X + offsetX,
+			getGroundY(backPos) + hoverHeight,
+			backPos.Z + offsetZ
+		)
+
+		local tweenInfo = TweenInfo.new(stepTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+		local tween = TweenService:Create(fakeRoot, tweenInfo, { CFrame = CFrame.new(targetPos, center) })
+		tween:Play()
+
+		local conn
+		conn = RunService.Heartbeat:Connect(function()
+			if not _G.AutoTween or tween.PlaybackState ~= Enum.PlaybackState.Playing then
+				conn:Disconnect()
+				return
+			end
+			root.CFrame = fakeRoot.CFrame
+			root.Velocity = Vector3.zero
+		end)
+
+		tween.Completed:Wait()
+	end
+	fakeRoot:Destroy()
+end
+
+-- ⚠️ Né vùng đỏ (AOE)
 local activeZoneDodge = false
 local detectedZones = {}
 
@@ -441,85 +487,107 @@ local function isDangerZone(part)
 	return false
 end
 
-local function moveBehindNPC()
-	if activeZoneDodge then return end
+local function moveBackFromZone()
+	if not _G.AutoRedZoneDodge or activeZoneDodge then return end
 	activeZoneDodge = true
 
 	local char = LocalPlayer.Character
 	if not char then activeZoneDodge = false return end
-	local hum, root = getHumanoidAndRoot(char)
+	local _, root = getHumanoidAndRoot(char)
 	if not root then activeZoneDodge = false return end
 
-	local npc = getNearestNPC()
+	local npc = getFarthestNPC()
 	if not npc then activeZoneDodge = false return end
 	local _, npcRoot = getHumanoidAndRoot(npc)
 	if not npcRoot then activeZoneDodge = false return end
 
-	-- Lùi ra phía sau NPC
-	local backPos = npcRoot.Position - npcRoot.CFrame.LookVector * (backOffset + 10)
-	local safeY = getGroundY(backPos)
-	local safePos = Vector3.new(backPos.X, safeY + hoverHeight, backPos.Z)
+	local npcLook = npcRoot.CFrame.LookVector
+	local safePos = npcRoot.Position - npcLook * dodgeBackDistance
+	safePos = Vector3.new(safePos.X, getGroundY(safePos), safePos.Z)
 
-	local tweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	task.wait(0.2)
+	local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(safePos, npcRoot.Position) })
 	tween:Play()
-	tween.Completed:Connect(function()
-		task.wait(1)
-		activeZoneDodge = false
-	end)
+	tween.Completed:Wait()
+
+	activeZoneDodge = false
 end
 
 Workspace.DescendantAdded:Connect(function(obj)
 	if isDangerZone(obj) and not detectedZones[obj] then
 		detectedZones[obj] = true
 		task.defer(function()
-			if not _G.AutoRedZoneDodge then return end
-			local char = LocalPlayer.Character
-			if not char then return end
-			local _, root = getHumanoidAndRoot(char)
-			if not root then return end
-
-			local dist = (root.Position - obj.Position).Magnitude
-			local size = obj.Size
-			if dist < (math.max(size.X, size.Z) / 2) + 6 then
-				moveBehindNPC()
+			if _G.AutoRedZoneDodge then
+				moveBackFromZone()
 			end
 		end)
 	end
 end)
 
--- 🎛️ GUI Toggle (nếu bạn dùng Rayfield)
+-- 🔁 Auto Farm Loop
+task.spawn(function()
+	while task.wait(2) do -- chờ 2s giữa mỗi lần để không bị kick
+		if _G.AutoTween then
+			local npc = getFarthestNPC()
+			if npc then
+				tweenTo(npc)
+			end
+		end
+	end
+end)
+
+-- 🪄 Rayfield GUI
 local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/Puhcoder16/theme/refs/heads/main/theme"))()
 local Window = Rayfield:CreateWindow({
-	Name = "Dungeon Quest - AutoFarm + Dodge",
+	Name = "Loc dep trai",
 	Icon = 0,
 	LoadingTitle = "⚔️ Dungeon Quest Script",
-	LoadingSubtitle = "by Loc dep trai",
+	LoadingSubtitle = "by Lộc",
+	ConfigurationSaving = {
+		Enabled = true,
+		FolderName = "DQFarm",
+		FileName = "Config"
+	}
 })
 
-local Tab = Window:CreateTab("🌊 AutoFarm & Dodge")
+local Tab = Window:CreateTab("⚙️ Farm", 4483362458)
 
-Tab:CreateToggle({
-	Name = "Auto Farm (TP sau lưng quái)",
-	CurrentValue = _G.AutoFarm,
-	Flag = "AutoFarm",
-	Callback = function(v)
-		_G.AutoFarm = v
-	end,
+local ToggleFarm = Tab:CreateToggle({
+	Name = "Auto Farm (Behind NPC)",
+	CurrentValue = false,
+	Flag = "ToggleAutoFarm",
+	Callback = function(Value)
+		_G.AutoTween = Value
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum, root = getHumanoidAndRoot(char)
+		if not hum or not root then return end
+		if Value then
+			hum.PlatformStand = true
+			hum:ChangeState(Enum.HumanoidStateType.Physics)
+			warn("[AUTO-FARM] ✅ Đã bật.")
+		else
+			hum.PlatformStand = false
+			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			warn("[AUTO-FARM] ⛔ Đã tắt.")
+		end
+	end
 })
 
-Tab:CreateToggle({
-	Name = "Auto Dodge vùng đỏ (né ra sau)",
-	CurrentValue = _G.AutoRedZoneDodge,
-	Flag = "AutoDodge",
-	Callback = function(v)
-		_G.AutoRedZoneDodge = v
-	end,
+local ToggleRedZone = Tab:CreateToggle({
+	Name = "Auto Dodge Zone (AOE)",
+	CurrentValue = false,
+	Flag = "ToggleRedZone",
+	Callback = function(Value)
+		_G.AutoRedZoneDodge = Value
+		if Value then
+			warn("[AUTO-DODGE] ✅ Đã bật né vùng đỏ.")
+		else
+			warn("[AUTO-DODGE] ⛔ Đã tắt né vùng đỏ.")
+		end
+	end
 })
-
-
-
-
 
 
 
