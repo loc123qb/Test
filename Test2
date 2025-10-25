@@ -345,7 +345,7 @@ end)
 -- ========= END =========
 
 
---// ⚔️ Dungeon Quest - Auto Farm Behind NPC + Auto Dodge (Smooth & Safe - Optimized)
+--// ⚔️ Dungeon Quest - Auto Farm Behind NPC + Auto Dodge (Smooth & Safe - Ground Fixed)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -353,9 +353,10 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 14
-local hoverHeight = 0
+local tweenSpeed = 12
+local hoverHeight = 0.5
 local maxRange = 4000
+local moveDelay = 2 -- 🕒 nghỉ 2s giữa mỗi lần di chuyển
 _G.AutoTween = false
 _G.AutoDodge = true
 _G.AutoRedZoneDodge = true
@@ -363,8 +364,6 @@ _G.AutoRedZoneDodge = true
 local dodgeDistance = 8
 local dodgeCooldown = 0.8
 local dodgeDetectRange = 25
-local orbitRadius = 12
-local orbitDuration = 3.5
 local backOffset = 8
 local groundRayLength = 120
 
@@ -419,8 +418,8 @@ local function getGroundY(pos)
 	return pos.Y
 end
 
--- 🌀 Di chuyển quanh phía sau NPC (rất mượt & không kick)
-local function tweenTo(target)
+-- 🌀 Teleport & Tween phía sau NPC (mượt, không bị bay)
+local function tweenBehindNPC(target)
 	local char = LocalPlayer.Character
 	if not char then return end
 	local hum, root = getHumanoidAndRoot(char)
@@ -429,49 +428,25 @@ local function tweenTo(target)
 	local _, targetRoot = getHumanoidAndRoot(target)
 	if not targetRoot then return end
 
+	-- 🧭 Tính vị trí phía sau NPC
 	local npcLook = targetRoot.CFrame.LookVector
-	local center = targetRoot.Position
-	local backPos = center - npcLook * backOffset
+	local npcPos = targetRoot.Position
+	local backPos = npcPos - npcLook * backOffset
 
-	local fakeRoot = Instance.new("Part")
-	fakeRoot.Anchored = true
-	fakeRoot.CanCollide = false
-	fakeRoot.Transparency = 1
-	fakeRoot.CFrame = root.CFrame
-	fakeRoot.Parent = Workspace
+	-- 📏 Tìm độ cao mặt đất thật
+	local groundY = getGroundY(backPos)
+	local targetPos = Vector3.new(backPos.X, groundY + hoverHeight, backPos.Z)
 
-	local steps = 36
-	local stepTime = orbitDuration / steps
+	-- ⏳ Delay nhẹ trước khi di chuyển
+	task.wait(moveDelay)
 
-	for i = 1, steps do
-		if not _G.AutoTween then break end
-
-		local angle = math.rad(i * (360 / steps))
-		local offsetX = math.cos(angle) * orbitRadius
-		local offsetZ = math.sin(angle) * orbitRadius
-		local targetPos = Vector3.new(
-			backPos.X + offsetX,
-			getGroundY(backPos) + hoverHeight,
-			backPos.Z + offsetZ
-		)
-
-		local tweenInfo = TweenInfo.new(stepTime, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-		local tween = TweenService:Create(fakeRoot, tweenInfo, { CFrame = CFrame.new(targetPos, center) })
-		tween:Play()
-
-		local conn
-		conn = RunService.Heartbeat:Connect(function()
-			if not _G.AutoTween or tween.PlaybackState ~= Enum.PlaybackState.Playing then
-				conn:Disconnect()
-				return
-			end
-			root.CFrame = fakeRoot.CFrame
-			root.Velocity = Vector3.zero
-		end)
-
-		tween.Completed:Wait()
-	end
-	fakeRoot:Destroy()
+	-- 🌀 Tween mượt, tốc độ chậm
+	local dist = (root.Position - targetPos).Magnitude
+	local tweenTime = math.clamp(dist / tweenSpeed, 1.2, 2.5)
+	local tweenInfo = TweenInfo.new(tweenTime, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, npcPos) })
+	tween:Play()
+	tween.Completed:Wait()
 end
 
 -- ⚡ Né vật thể tấn công (Projectile)
@@ -498,8 +473,9 @@ local function autoDodge()
 					local side = math.random(0, 1) == 0 and -1 or 1
 					local dodgeDir = root.CFrame.RightVector * side * dodgeDistance
 					local newPos = root.Position + dodgeDir
+					newPos = Vector3.new(newPos.X, getGroundY(newPos) + 1, newPos.Z)
 
-					local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+					local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 					local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(newPos) })
 					tween:Play()
 					tween.Completed:Connect(function()
@@ -540,10 +516,10 @@ local function moveAwayFrom(pos)
 
 	local side = math.random(0, 1) == 0 and -1 or 1
 	local dir = root.CFrame.RightVector * side
-	local safePos = root.Position + dir * 8
-	safePos = Vector3.new(safePos.X, getGroundY(safePos), safePos.Z)
+	local safePos = root.Position + dir * 10
+	safePos = Vector3.new(safePos.X, getGroundY(safePos) + 1, safePos.Z)
 
-	local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	local tweenInfo = TweenInfo.new(0.45, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(safePos) })
 	tween:Play()
 	tween.Completed:Connect(function()
@@ -576,7 +552,7 @@ task.spawn(function()
 			autoDodge()
 			local npc = getFarthestNPC()
 			if npc then
-				tweenTo(npc)
+				tweenBehindNPC(npc)
 			end
 		end
 	end
@@ -584,7 +560,7 @@ end)
 
 -- 🪄 Toggle GUI
 local ToggleFarm = Tab:CreateToggle({
-	Name = "Auto Farm (Behind NPC)",
+	Name = "Auto Farm (Behind NPC - Smooth)",
 	CurrentValue = false,
 	Flag = "ToggleAutoFarm",
 	Callback = function(Value)
@@ -618,6 +594,7 @@ local ToggleRedZone = Tab:CreateToggle({
 		end
 	end
 })
+
 
 
 
