@@ -345,7 +345,7 @@ end)
 -- ========= END =========
 
 
---// ⚔️ Dungeon Quest - Auto Farm Behind NPC + Auto Dodge (Smooth & Safe - Ground Fixed)
+--// ⚔️ Dungeon Quest - Auto Farm Behind NPC + Auto Dodge (Smooth & Safe - FIXED)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -353,10 +353,9 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 12
-local hoverHeight = 0.5
+local tweenSpeed = 14
+local hoverHeight = 0
 local maxRange = 4000
-local moveDelay = 2 -- 🕒 nghỉ 2s giữa mỗi lần di chuyển
 _G.AutoTween = false
 _G.AutoDodge = true
 _G.AutoRedZoneDodge = true
@@ -364,6 +363,8 @@ _G.AutoRedZoneDodge = true
 local dodgeDistance = 8
 local dodgeCooldown = 0.8
 local dodgeDetectRange = 25
+local orbitRadius = 12
+local orbitDuration = 3.5
 local backOffset = 8
 local groundRayLength = 120
 
@@ -418,8 +419,8 @@ local function getGroundY(pos)
 	return pos.Y
 end
 
--- 🌀 Teleport & Tween phía sau NPC (mượt, không bị bay)
-local function tweenBehindNPC(target)
+-- 🌀 Di chuyển quanh phía sau NPC (mượt + an toàn)
+local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
 	local hum, root = getHumanoidAndRoot(char)
@@ -428,23 +429,15 @@ local function tweenBehindNPC(target)
 	local _, targetRoot = getHumanoidAndRoot(target)
 	if not targetRoot then return end
 
-	-- 🧭 Tính vị trí phía sau NPC
 	local npcLook = targetRoot.CFrame.LookVector
-	local npcPos = targetRoot.Position
-	local backPos = npcPos - npcLook * backOffset
+	local center = targetRoot.Position
+	local backPos = center - npcLook * backOffset
 
-	-- 📏 Tìm độ cao mặt đất thật
-	local groundY = getGroundY(backPos)
-	local targetPos = Vector3.new(backPos.X, groundY + hoverHeight, backPos.Z)
+	local targetY = getGroundY(backPos)
+	local targetPos = Vector3.new(backPos.X, targetY + hoverHeight, backPos.Z)
 
-	-- ⏳ Delay nhẹ trước khi di chuyển
-	task.wait(moveDelay)
-
-	-- 🌀 Tween mượt, tốc độ chậm
-	local dist = (root.Position - targetPos).Magnitude
-	local tweenTime = math.clamp(dist / tweenSpeed, 1.2, 2.5)
-	local tweenInfo = TweenInfo.new(tweenTime, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, npcPos) })
+	local tweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, center) })
 	tween:Play()
 	tween.Completed:Wait()
 end
@@ -473,9 +466,8 @@ local function autoDodge()
 					local side = math.random(0, 1) == 0 and -1 or 1
 					local dodgeDir = root.CFrame.RightVector * side * dodgeDistance
 					local newPos = root.Position + dodgeDir
-					newPos = Vector3.new(newPos.X, getGroundY(newPos) + 1, newPos.Z)
 
-					local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+					local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
 					local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(newPos) })
 					tween:Play()
 					tween.Completed:Connect(function()
@@ -488,7 +480,7 @@ local function autoDodge()
 	end
 end
 
--- ⚠️ Né vùng đỏ (AOE)
+-- ⚠️ Né vùng đỏ (AOE) - Ra sau quái + tiếp tục farm
 local activeZoneDodge = false
 local detectedZones = {}
 
@@ -504,27 +496,31 @@ local function isDangerZone(part)
 	return false
 end
 
-local function moveAwayFrom(pos)
-	if not _G.AutoRedZoneDodge then return end
+local function moveBehindNPC()
 	if activeZoneDodge then return end
 	activeZoneDodge = true
 
 	local char = LocalPlayer.Character
-	if not char then return end
-	local _, root = getHumanoidAndRoot(char)
-	if not root then return end
+	if not char then activeZoneDodge = false return end
+	local hum, root = getHumanoidAndRoot(char)
+	if not root then activeZoneDodge = false return end
 
-	local side = math.random(0, 1) == 0 and -1 or 1
-	local dir = root.CFrame.RightVector * side
-	local safePos = root.Position + dir * 10
-	safePos = Vector3.new(safePos.X, getGroundY(safePos) + 1, safePos.Z)
+	local npc = getFarthestNPC()
+	if not npc then activeZoneDodge = false return end
+	local _, npcRoot = getHumanoidAndRoot(npc)
+	if not npcRoot then activeZoneDodge = false return end
 
-	local tweenInfo = TweenInfo.new(0.45, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(safePos) })
+	local backPos = npcRoot.Position - npcRoot.CFrame.LookVector * (backOffset + 10)
+	local safeY = getGroundY(backPos)
+	local safePos = Vector3.new(backPos.X, safeY + hoverHeight, backPos.Z)
+
+	local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(safePos, npcRoot.Position) })
 	tween:Play()
-	tween.Completed:Connect(function()
-		activeZoneDodge = false
-	end)
+	tween.Completed:Wait()
+
+	task.wait(1.8) -- 🕒 Đứng yên 1.8s rồi quay lại tiếp tục farm
+	activeZoneDodge = false
 end
 
 Workspace.DescendantAdded:Connect(function(obj)
@@ -536,10 +532,11 @@ Workspace.DescendantAdded:Connect(function(obj)
 			if not char then return end
 			local _, root = getHumanoidAndRoot(char)
 			if not root then return end
-			local size = obj.Size
+
 			local dist = (root.Position - obj.Position).Magnitude
-			if dist < (math.max(size.X, size.Z) / 2) + 3 then
-				moveAwayFrom(obj.Position)
+			local size = obj.Size
+			if dist < (math.max(size.X, size.Z) / 2) + 5 then
+				moveBehindNPC()
 			end
 		end)
 	end
@@ -547,53 +544,17 @@ end)
 
 -- 🔁 Auto Farm Loop
 task.spawn(function()
-	while task.wait(0.2) do
-		if _G.AutoTween then
+	while task.wait(0.3) do
+		if _G.AutoTween and not activeZoneDodge then
 			autoDodge()
 			local npc = getFarthestNPC()
 			if npc then
-				tweenBehindNPC(npc)
+				tweenTo(npc)
 			end
 		end
 	end
 end)
 
--- 🪄 Toggle GUI
-local ToggleFarm = Tab:CreateToggle({
-	Name = "Auto Farm (Behind NPC - Smooth)",
-	CurrentValue = false,
-	Flag = "ToggleAutoFarm",
-	Callback = function(Value)
-		_G.AutoTween = Value
-		local char = LocalPlayer.Character
-		if not char then return end
-		local hum, root = getHumanoidAndRoot(char)
-		if not hum or not root then return end
-		if Value then
-			hum.PlatformStand = true
-			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật.")
-		else
-			hum.PlatformStand = false
-			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-			warn("[AUTO-FARM] ⛔ Đã tắt.")
-		end
-	end
-})
-
-local ToggleRedZone = Tab:CreateToggle({
-	Name = "Auto Dodge Red Zone (AOE)",
-	CurrentValue = true,
-	Flag = "ToggleRedZoneDodge",
-	Callback = function(Value)
-		_G.AutoRedZoneDodge = Value
-		if Value then
-			warn("[AUTO-DODGE] ✅ Đã bật né vùng đỏ.")
-		else
-			warn("[AUTO-DODGE] ⛔ Đã tắt né vùng đỏ.")
-		end
-	end
-})
 
 
 
@@ -671,356 +632,104 @@ local Toggle = MiscTab:CreateToggle({
 	end,
 })
 
-
--- Ultra Global Fix-Lag Toggle (works across most places)
--- - Minimizes graphics, disables particles/lighting/effects/sounds
--- - Toggle on/off; attempts to restore saved values on off
--- - Use in your client (private/test). Some restores require reload to fully revert.
-
+---- ⚙️ FIX LAG (Tích hợp vào Misc Tab)
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local StarterGui = game:GetService("StarterGui")
-local HttpService = game:GetService("HttpService")
-
--- CONFIG
-local CHECK_INTERVAL = 2          -- how often (seconds) to re-scan and enforce low-graphics
-local TARGET_QUALITY = Enum.QualityLevel.Level01
-local MAKE_TRANSPARENT_DECALS = true
-local SILENCE_SOUNDS = true
-
--- STATE storage for restoration
-local saved = {
-    lighting = {},
-    terrain = {},
-    objects = {},      -- [obj] = {prop = oldValue, ...}
-    playerChars = {},  -- store a few player character original part materials etc
-    quality = nil
-}
+local LocalPlayer = Players.LocalPlayer
 
 local active = false
-local enforcementThread = nil
+local saved = {}
 
--- helper: safe pcall property get/set
-local function safeSet(obj, prop, value)
-    if not obj or not prop then return end
-    local ok, err = pcall(function()
-        obj[prop] = value
-    end)
-    if not ok then
-        -- ignore
+-- 🌈 Lưu cấu hình ánh sáng gốc
+local function saveOriginal()
+    saved.Lighting = {
+        Technology = Lighting.Technology,
+        GlobalShadows = Lighting.GlobalShadows,
+        Brightness = Lighting.Brightness,
+        FogEnd = Lighting.FogEnd
+    }
+end
+
+-- 🔄 Khôi phục cấu hình ánh sáng gốc
+local function restoreOriginal()
+    if not saved.Lighting then return end
+    Lighting.Technology = saved.Lighting.Technology
+    Lighting.GlobalShadows = saved.Lighting.GlobalShadows
+    Lighting.Brightness = saved.Lighting.Brightness
+    Lighting.FogEnd = saved.Lighting.FogEnd
+end
+
+-- 💨 Hàm giảm hiệu ứng từng đối tượng
+local function minimize(obj)
+    if obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
+        obj.Enabled = false
     end
-end
 
-local function safeGet(obj, prop)
-    if not obj or not prop then return nil end
-    local ok, res = pcall(function() return obj[prop] end)
-    if ok then return res end
-    return nil
-end
-
--- Save lighting original settings
-local function saveLighting()
-    local L = Lighting
-    saved.lighting.GlobalShadows = safeGet(L, "GlobalShadows")
-    saved.lighting.FogEnd = safeGet(L, "FogEnd")
-    saved.lighting.Brightness = safeGet(L, "Brightness")
-    saved.lighting.ClockTime = safeGet(L, "ClockTime")
-    saved.lighting.EnvironmentDiffuseScale = safeGet(L, "EnvironmentDiffuseScale")
-    saved.lighting.EnvironmentSpecularScale = safeGet(L, "EnvironmentSpecularScale")
-    saved.lighting.OutdoorAmbient = safeGet(L, "OutdoorAmbient")
-    saved.quality = safeGet(settings(), "Rendering").QualityLevel
-end
-
--- Restore lighting
-local function restoreLighting()
-    local L = Lighting
-    if saved.lighting.GlobalShadows ~= nil then safeSet(L, "GlobalShadows", saved.lighting.GlobalShadows) end
-    if saved.lighting.FogEnd ~= nil then safeSet(L, "FogEnd", saved.lighting.FogEnd) end
-    if saved.lighting.Brightness ~= nil then safeSet(L, "Brightness", saved.lighting.Brightness) end
-    if saved.lighting.ClockTime ~= nil then safeSet(L, "ClockTime", saved.lighting.ClockTime) end
-    if saved.lighting.EnvironmentDiffuseScale ~= nil then safeSet(L, "EnvironmentDiffuseScale", saved.lighting.EnvironmentDiffuseScale) end
-    if saved.lighting.EnvironmentSpecularScale ~= nil then safeSet(L, "EnvironmentSpecularScale", saved.lighting.EnvironmentSpecularScale) end
-    if saved.lighting.OutdoorAmbient ~= nil then safeSet(L, "OutdoorAmbient", saved.lighting.OutdoorAmbient) end
-    if saved.quality ~= nil then
-        pcall(function() settings().Rendering.QualityLevel = saved.quality end)
+    if obj:IsA("Explosion") then
+        obj.Visible = false
     end
-end
 
--- Save terrain properties if present
-local function saveTerrain()
-    local T = Workspace:FindFirstChildOfClass("Terrain")
-    if not T then return end
-    saved.terrain.WaterWaveSize = safeGet(T, "WaterWaveSize")
-    saved.terrain.WaterWaveSpeed = safeGet(T, "WaterWaveSpeed")
-    saved.terrain.WaterReflectance = safeGet(T, "WaterReflectance")
-    saved.terrain.WaterTransparency = safeGet(T, "WaterTransparency")
-end
-
-local function restoreTerrain()
-    local T = Workspace:FindFirstChildOfClass("Terrain")
-    if not T then return end
-    if saved.terrain.WaterWaveSize ~= nil then safeSet(T, "WaterWaveSize", saved.terrain.WaterWaveSize) end
-    if saved.terrain.WaterWaveSpeed ~= nil then safeSet(T, "WaterWaveSpeed", saved.terrain.WaterWaveSpeed) end
-    if saved.terrain.WaterReflectance ~= nil then safeSet(T, "WaterReflectance", saved.terrain.WaterReflectance) end
-    if saved.terrain.WaterTransparency ~= nil then safeSet(T, "WaterTransparency", saved.terrain.WaterTransparency) end
-end
-
--- Record an object's property for restore later (first time only)
-local function recordObjectProp(obj, prop)
-    if not obj or not prop then return end
-    if not saved.objects[obj] then
-        saved.objects[obj] = {}
-    end
-    if saved.objects[obj][prop] == nil then
-        saved.objects[obj][prop] = safeGet(obj, prop)
-    end
-end
-
--- Apply low-graphics transformation for a single descendant
-local function minimizeObject(obj)
-    if not obj then return end
-    -- Part-ish: set material / reflectance
     if obj:IsA("BasePart") then
-        recordObjectProp(obj, "Material")
-        recordObjectProp(obj, "Reflectance")
-        safeSet(obj, "Material", Enum.Material.SmoothPlastic)
-        safeSet(obj, "Reflectance", 0)
+        obj.Material = Enum.Material.SmoothPlastic
+        obj.Reflectance = 0
+        obj.CastShadow = false
+        obj.Color = Color3.fromRGB(200,200,200)
     end
 
-    -- Particles / Trails / Beams
-    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
-        recordObjectProp(obj, "Enabled")
-        safeSet(obj, "Enabled", false)
-    end
-
-    -- Fire/Smoke/Sparkles/Explosion
-    if obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") or obj:IsA("Explosion") then
-        recordObjectProp(obj, "Enabled")
-        safeSet(obj, "Enabled", false)
-    end
-
-    -- Lights
-    if obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
-        recordObjectProp(obj, "Enabled")
-        safeSet(obj, "Enabled", false)
-    end
-
-    -- Decals / Textures
     if obj:IsA("Decal") or obj:IsA("Texture") then
-        recordObjectProp(obj, "Transparency")
-        if MAKE_TRANSPARENT_DECALS then
-            safeSet(obj, "Transparency", 1)
-        end
+        obj.Transparency = 1
     end
 
-    -- Sounds (stop looping/ reduce volume)
     if obj:IsA("Sound") then
-        recordObjectProp(obj, "Playing")
-        recordObjectProp(obj, "Volume")
-        if SILENCE_SOUNDS then
-            pcall(function()
-                obj.Looped = false
-                obj:Stop()
-                obj.Volume = 0
-            end)
-        end
+        obj.Volume = 0
+        obj:Stop()
     end
 
-    -- SpecialMeshes: set scale small? skip for safety
-end
-
--- Restore recorded object properties
-local function restoreObjects()
-    for obj, props in pairs(saved.objects) do
-        if obj and obj.Parent then
-            for prop, val in pairs(props) do
-                pcall(function() obj[prop] = val end)
-            end
-        end
-    end
-    saved.objects = {}
-end
-
--- Simplify player characters (store and set)
-local function minimizePlayerCharacters()
-    for _, pl in ipairs(Players:GetPlayers()) do
-        if pl.Character and pl ~= Players.LocalPlayer then
-            local char = pl.Character
-            if not saved.playerChars[pl] then saved.playerChars[pl] = {} end
-            -- iterate parts
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    if saved.playerChars[pl][part] == nil then
-                        saved.playerChars[pl][part] = {
-                            Material = safeGet(part, "Material"),
-                            Reflectance = safeGet(part, "Reflectance"),
-                            Transparency = safeGet(part, "Transparency")
-                        }
-                    end
-                    safeSet(part, "Material", Enum.Material.SmoothPlastic)
-                    safeSet(part, "Reflectance", 0)
-                    safeSet(part, "Transparency", 0)
-                elseif part:IsA("ParticleEmitter") then
-                    if saved.playerChars[pl][part] == nil then
-                        saved.playerChars[pl][part] = {Enabled = safeGet(part, "Enabled")}
-                    end
-                    safeSet(part, "Enabled", false)
-                elseif part:IsA("Decal") or part:IsA("Texture") then
-                    if saved.playerChars[pl][part] == nil then
-                        saved.playerChars[pl][part] = {Transparency = safeGet(part, "Transparency")}
-                    end
-                    safeSet(part, "Transparency", 1)
-                end
-            end
-        end
+    if obj:IsA("Light") then
+        obj.Enabled = false
     end
 end
 
-local function restorePlayerCharacters()
-    for pl, data in pairs(saved.playerChars) do
-        if pl and pl.Character then
-            for part, props in pairs(data) do
-                if part and part.Parent then
-                    for k, v in pairs(props) do
-                        pcall(function() part[k] = v end)
-                    end
-                end
-            end
-        end
-    end
-    saved.playerChars = {}
-end
+-- 🚀 Áp dụng chế độ giảm lag
+local function applyLiteMode()
+    Lighting.Technology = Enum.Technology.Compatibility
+    Lighting.GlobalShadows = false
+    Lighting.Brightness = 1
+    Lighting.FogEnd = 999999999
 
--- Global minimize pass (scan workspace / players)
-local function doMinimizePass()
-    -- lighting/quality
-    pcall(function()
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 1e9
-        Lighting.Brightness = 1
-        Lighting.ClockTime = 14
-        Lighting.EnvironmentDiffuseScale = 0
-        Lighting.EnvironmentSpecularScale = 0
-        settings().Rendering.QualityLevel = TARGET_QUALITY
-    end)
-
-    -- terrain
-    local T = Workspace:FindFirstChildOfClass("Terrain")
-    if T then
-        pcall(function()
-            T.WaterWaveSize = 0
-            T.WaterWaveSpeed = 0
-            T.WaterReflectance = 0
-            T.WaterTransparency = 1
-        end)
-    end
-
-    -- scan and minimize existing descendants
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        minimizeObject(obj)
+        minimize(obj)
     end
 
-    -- minimize players
-    minimizePlayerCharacters()
-end
-
--- enforcement loop
-local function startEnforcement()
-    enforcementThread = task.spawn(function()
-        while active do
-            local ok, err = pcall(doMinimizePass)
-            if not ok then
-                -- ignore errors
-            end
-            task.wait(CHECK_INTERVAL)
-        end
+    Workspace.DescendantAdded:Connect(function(obj)
+        if active then minimize(obj) end
     end)
 end
 
--- stop enforcement and attempt restore
-local function stopEnforcement()
-    active = false
-    if enforcementThread then
-        -- thread will exit next loop
-        enforcementThread = nil
+-- 🧩 Bật/Tắt FixLag
+local function toggleFixLag(on)
+    active = on
+    if on then
+        saveOriginal()
+        applyLiteMode()
+        warn("✅ Fix Lag LITE: ON")
+    else
+        restoreOriginal()
+        warn("⛔ Fix Lag LITE: OFF (bạn có thể cần rejoin để khôi phục hoàn toàn)")
     end
-    -- restore modified objects
-    pcall(restoreObjects)
-    pcall(restorePlayerCharacters)
-    pcall(restoreLighting)
-    pcall(restoreTerrain)
-    -- Note: many transient objects created while script active won't be restored automatically.
 end
 
--- UI toggle integration
-local function createToggleUsingMiscTab()
-    if type(MiscTab) == "table" and MiscTab.CreateToggle then
-        MiscTab:CreateToggle({
-            Name = "Fix Lag: Ultra (global)",
-            CurrentValue = false,
-            Flag = "Toggle_FixLagUltra",
-            Callback = function(Value)
-                if Value then
-                    -- save initial state
-                    saveLighting()
-                    saveTerrain()
-                    -- start
-                    active = true
-                    startEnforcement()
-                    print("[FixLag] Ultra ON")
-                else
-                    -- stop and restore
-                    stopEnforcement()
-                    print("[FixLag] Ultra OFF (partial restore attempted)")
-                end
-            end,
-        })
-        return true
-    end
-    return false
-end
+-- 🎛️ Thêm Toggle vào Misc Tab
+local ToggleFixLag = MiscTab:CreateToggle({
+    Name = "Fix Lag (Lite Mode)",
+    CurrentValue = false,
+    Flag = "Toggle_FixLag",
+    Callback = function(Value)
+        toggleFixLag(Value)
+    end,
+})
 
--- Fallback: create a simple ScreenGui toggle button if MiscTab not present
-local function createSimpleGuiToggle()
-    local screen = Instance.new("ScreenGui")
-    screen.Name = "FixLagUltraGui"
-    screen.ResetOnSpawn = false
-    screen.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 220, 0, 40)
-    btn.Position = UDim2.new(1, -240, 0, 40)
-    btn.AnchorPoint = Vector2.new(0, 0)
-    btn.Text = "Fix Lag Ultra: OFF"
-    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    btn.TextColor3 = Color3.fromRGB(255,255,255)
-    btn.Parent = screen
-
-    btn.MouseButton1Click:Connect(function()
-        if not active then
-            saveLighting()
-            saveTerrain()
-            active = true
-            startEnforcement()
-            btn.Text = "Fix Lag Ultra: ON"
-            btn.BackgroundColor3 = Color3.fromRGB(50,150,60)
-        else
-            stopEnforcement()
-            btn.Text = "Fix Lag Ultra: OFF"
-            btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
-        end
-    end)
-end
-
--- Try to attach to MiscTab; otherwise fallback to basic GUI
-local ok = pcall(function() return createToggleUsingMiscTab() end)
-if not ok or not ok then
-    createSimpleGuiToggle()
-end
-
-print("[FixLagUltra] Loaded - toggle available.")
 
 
 
