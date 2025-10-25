@@ -357,7 +357,7 @@ local tweenSpeed = 15
 local hoverHeight = 0
 local maxRange = 4000
 local teleportDistance = 15
-local teleportDelay = 1.25
+local teleportDelay = 2
 local orbitRadius = 20
 local orbitDuration = 3
 local dodgeDistance = 20
@@ -384,7 +384,23 @@ local function isPlayerModel(model)
 	return false
 end
 
--- 🔍 Tìm NPC xa nhất
+-- 🧍 Kiểm tra NPC đã spawn hoàn chỉnh (đứng trên mặt đất)
+local function isNPCReady(npc)
+	local hum, hrp = getHumanoidAndRoot(npc)
+	if not (hum and hrp) then return false end
+	if hum.Health <= 0 then return false end
+
+	-- Kiểm tra nếu HRP ở dưới map hoặc chưa chạm đất
+	local ray = Ray.new(hrp.Position, Vector3.new(0, -10, 0))
+	local hit = Workspace:FindPartOnRay(ray, npc)
+	if not hit then
+		return false -- chưa đứng trên địa hình
+	end
+
+	return true
+end
+
+-- 🔍 Tìm NPC xa nhất hợp lệ
 local function getFarthestNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -395,7 +411,7 @@ local function getFarthestNPC()
 	for _, v in ipairs(Workspace:GetDescendants()) do
 		if v:IsA("Model") and v ~= char then
 			local hum, hrp = getHumanoidAndRoot(v)
-			if hum and hrp and hum.Health > 0 and not isPlayerModel(v) then
+			if hum and hrp and hum.Health > 0 and not isPlayerModel(v) and isNPCReady(v) then
 				local dist = (hrp.Position - root.Position).Magnitude
 				if dist > longest and dist < maxRange then
 					longest = dist
@@ -417,8 +433,9 @@ local function tweenTo(target)
 
 	local _, targetRoot = getHumanoidAndRoot(target)
 	if not targetRoot then return end
+	if not isNPCReady(target) then return end -- chỉ di chuyển khi NPC đã spawn và còn sống
 
-	task.wait(teleportDelay) -- ⏱️ Đứng yên 2s trước khi di chuyển
+	task.wait(teleportDelay)
 
 	local behindDir = -targetRoot.CFrame.LookVector
 	local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
@@ -428,6 +445,7 @@ local function tweenTo(target)
 	local totalSteps = math.floor(360 / 10)
 	for i = 1, totalSteps do
 		if not _G.AutoTween then break end
+		if not isNPCReady(target) then break end -- dừng nếu NPC chết giữa chừng
 		local angle = math.rad(i * 10)
 		local offsetX = math.cos(angle) * orbitRadius
 		local offsetZ = math.sin(angle) * orbitRadius
@@ -532,6 +550,7 @@ local ToggleDodge = Tab:CreateToggle({
 		end
 	end
 })
+
 
 
 
