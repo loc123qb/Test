@@ -366,6 +366,7 @@ local dodgeCooldown = 1.2
 
 _G.AutoTween = false
 _G.AutoDodgeZone = false
+_G.ComboDone = true -- đảm bảo auto farm loop hoạt động
 
 -- 🧠 Hàm hỗ trợ
 local function getHumanoidAndRoot(model)
@@ -400,18 +401,22 @@ local function isNPCReady(npc)
 	return true
 end
 
--- 🔍 Tìm NPC xa nhất hợp lệ
+-- 🔍 Tìm NPC xa nhất hợp lệ (dành riêng cho Dungeon Quest)
 local function getFarthestNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
 	local _, root = getHumanoidAndRoot(char)
 	if not root then return end
 
+	-- Dungeon Quest lưu quái trong Workspace.Enemies hoặc Workspace.Mobs
+	local enemiesFolder = Workspace:FindFirstChild("Enemies") or Workspace:FindFirstChild("Mobs")
+	if not enemiesFolder then return end
+
 	local farthest, longest = nil, 0
-	for _, v in ipairs(Workspace:GetDescendants()) do
-		if v:IsA("Model") and v ~= char then
+	for _, v in ipairs(enemiesFolder:GetChildren()) do
+		if v:IsA("Model") then
 			local hum, hrp = getHumanoidAndRoot(v)
-			if hum and hrp and hum.Health > 0 and not isPlayerModel(v) and isNPCReady(v) then
+			if hum and hrp and hum.Health > 0 and isNPCReady(v) then
 				local dist = (hrp.Position - root.Position).Magnitude
 				if dist > longest and dist < maxRange then
 					longest = dist
@@ -446,7 +451,7 @@ local function tweenTo(target)
 	local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
 
 	-- Nếu vị trí bất thường hoặc xa quá thì bỏ qua
-	if (targetPos - root.Position).Magnitude > 600 or targetPos.Y < -50 or targetPos.Y > 300 then return end
+	if (targetPos - root.Position).Magnitude > 2000 or targetPos.Y < -50 or targetPos.Y > 300 then return end
 
 	-- 🕐 Di chuyển chậm, mượt để không bị anti-cheat phát hiện
 	local tweenInfo = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -483,8 +488,6 @@ local function tweenTo(target)
 		end
 	end)
 end
-
-
 
 -- ⚡ Auto Dodge Zone (né vùng đỏ AOE)
 local lastDodge = 0
@@ -578,10 +581,6 @@ local ToggleDodge = Tab:CreateToggle({
 		end
 	end
 })
-
-
-
-
 
 
 local Toggle = MiscTab:CreateToggle({
