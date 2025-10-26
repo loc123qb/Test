@@ -423,50 +423,62 @@ local function getFarthestNPC()
 	return farthest
 end
 
--- 🌀 Di chuyển đến sau boss và giữ yên một chỗ cố định
+-- 🌀 Di chuyển đến sau boss và giữ yên một chỗ cố định, mượt và tránh bị kick
 local function tweenTo(target)
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum, root = getHumanoidAndRoot(char)
-    if not root then return end
-    if not target then return end
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum, root = getHumanoidAndRoot(char)
+	if not root then return end
+	if not target then return end
 
-    local _, targetRoot = getHumanoidAndRoot(target)
-    if not targetRoot then return end
-    if not isNPCReady(target) then return end
+	local _, targetRoot = getHumanoidAndRoot(target)
+	if not targetRoot then return end
+	if not isNPCReady(target) then return end
 
-    -- đợi boss spawn ổn định
-    task.wait(teleportDelay)
+	task.wait(teleportDelay)
 
-    -- di chuyển đến vị trí sau boss
-    local behindDir = -targetRoot.CFrame.LookVector
-    local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
+	local behindDir = -targetRoot.CFrame.LookVector
+	local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
 
-    local tweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, targetRoot.Position) })
-    tween:Play()
-    tween.Completed:Wait()
+	-- Nếu vị trí quá xa hoặc bất thường → bỏ qua
+	if (targetPos - root.Position).Magnitude > 500 or targetPos.Y < -50 then return end
 
-    -- Giữ cố định vị trí phía sau boss, tránh bị rơi hoặc trượt
-    task.spawn(function()
-        while _G.AutoTween and target and isNPCReady(target) do
-            local _, tRoot = getHumanoidAndRoot(target)
-            if not tRoot then break end
+	local tweenInfo = TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, targetRoot.Position) })
+	tween:Play()
+	tween.Completed:Wait()
 
-            -- cập nhật vị trí theo hướng nhìn của boss (luôn phía sau)
-            local behind = -tRoot.CFrame.LookVector
-            local stayPos = tRoot.Position + behind * teleportDistance + Vector3.new(0, hoverHeight, 0)
-            root.CFrame = CFrame.new(stayPos, tRoot.Position)
+	-- Giữ vị trí phía sau boss, tránh bị rơi hoặc giật
+	task.spawn(function()
+		local stayTime = tick()
+		while _G.AutoTween and target and isNPCReady(target) do
+			-- Nếu đứng yên hơn 1.25s thì mới di chuyển lại
+			if tick() - stayTime >= 1.25 then
+				local _, tRoot = getHumanoidAndRoot(target)
+				if not tRoot then break end
 
-            -- chống rơi và nghiêng người
-            if hum and hum.Health > 0 then
-                hum.PlatformStand = true
-                hum:ChangeState(Enum.HumanoidStateType.Physics)
-            end
+				local behind = -tRoot.CFrame.LookVector
+				local newPos = tRoot.Position + behind * teleportDistance + Vector3.new(0, hoverHeight, 0)
 
-            task.wait(0.15)
-        end
-    end)
+				if (newPos - root.Position).Magnitude < 300 and newPos.Y > -30 then
+					local info = TweenInfo.new(1.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+					local safeTween = TweenService:Create(root, info, { CFrame = CFrame.new(newPos, tRoot.Position) })
+					safeTween:Play()
+					safeTween.Completed:Wait()
+				end
+
+				stayTime = tick()
+			end
+
+			-- Chống rơi & reset tư thế
+			if hum and hum.Health > 0 then
+				hum.PlatformStand = true
+				hum:ChangeState(Enum.HumanoidStateType.Physics)
+			end
+
+			task.wait(0.1)
+		end
+	end)
 end
 
 
