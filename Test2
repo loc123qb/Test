@@ -345,18 +345,17 @@ end)
 -- ========= END =========
 
 
---// 🌊 Auto Farm Hover Tween - Smooth Behind NPC (All Dungeon Quest Maps)
+--// 🌊 Auto Farm Hover Tween - Smooth Behind NPC (Stable for All Dungeon Quest Maps)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 55
+local tweenSpeed = 55 -- tốc độ di chuyển
 local hoverHeight = 0
-local teleportDistance = 8
-local updateDelay = 1.25
+local teleportDistance = 8 -- khoảng cách phía sau quái
+local updateDelay = 1.25 -- thời gian delay giữa mỗi lần tìm NPC
 local maxRange = 4000
 
 _G.AutoTween = false
@@ -378,7 +377,7 @@ local function isPlayerModel(model)
 	return false
 end
 
--- 🔍 Ưu tiên Boss trước, sau đó mới đến quái gần nhất
+-- 🔍 Ưu tiên Boss trước, sau đó quái gần nhất
 local function getNearestNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -398,7 +397,7 @@ local function getNearestNPC()
 						local dist = (hrp.Position - root.Position).Magnitude
 						if dist < maxRange then
 							local lowerName = v.Name:lower()
-							if lowerName:find("boss") or lowerName:find("king") or lowerName:find("beast") then
+							if lowerName:find("boss") or lowerName:find("king") or lowerName:find("beast") or lowerName:find("lord") then
 								if dist < shortestBoss then
 									shortestBoss = dist
 									nearestBoss = v
@@ -419,7 +418,7 @@ local function getNearestNPC()
 	return nearestBoss or nearestEnemy
 end
 
--- 🌀 Tween mượt tới phía sau quái
+-- 🌀 Tween mượt đến sau NPC (chỉ 1 lần, không tween trái phải)
 local function tweenToTarget(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -430,15 +429,17 @@ local function tweenToTarget(target)
 	local _, targetRoot = getHumanoidAndRoot(target)
 	if not targetRoot then return end
 
-	-- Tính vị trí phía sau quái
+	-- Vị trí phía sau quái
 	local behindDir = -targetRoot.CFrame.LookVector
 	local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
 
-	-- Tween di chuyển mượt (không teleport thẳng)
+	-- Tạo tween di chuyển thật mượt
 	local dist = (root.Position - targetPos).Magnitude
 	local duration = dist / tweenSpeed
+	if duration < 0.1 then duration = 0.1 end
+
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos) })
+	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, targetRoot.Position) })
 	tween:Play()
 	tween.Completed:Wait()
 end
@@ -481,6 +482,7 @@ local ToggleFarm = Tab:CreateToggle({
 		end
 	end
 })
+
 
 
 
