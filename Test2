@@ -600,6 +600,89 @@ local Toggle = MiscTab:CreateToggle({
 })
 
 
+--// 🧩 Auto Bonus Boss
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local dataRemoteEvent = ReplicatedStorage:WaitForChild("dataRemoteEvent")
+
+_G.AutoBonusBoss = false
+
+local AutoBonus = MiscTab:CreateToggle({
+    Name = "Auto Bonus Boss",
+    CurrentValue = false,
+    Flag = "AutoBonusBoss",
+    Callback = function(Value)
+        _G.AutoBonusBoss = Value
+        if Value then
+            task.spawn(function()
+                while _G.AutoBonusBoss do
+                    task.wait(1)
+                    local bonusAvailable = false
+
+                    -- Kiểm tra nếu server có thể vote "bonus"
+                    for _, remote in pairs(ReplicatedStorage:GetChildren()) do
+                        if remote.Name == "dataRemoteEvent" then
+                            bonusAvailable = true
+                            break
+                        end
+                    end
+
+                    -- Nếu có bonus → vote bonus
+                    if bonusAvailable then
+                        dataRemoteEvent:FireServer({
+                            {
+                                ["\3"] = "vote",
+                                vote = "bonus"
+                            },
+                            "-"
+                        })
+                        task.wait(1) -- chờ xíu để bonus xử lý xong
+                    end
+                end
+            end)
+        end
+    end,
+})
+
+--// ⚙️ Tích hợp ưu tiên AutoBonusBoss trước AutoRetry
+-- Giả sử AutoRetry có biến _G.AutoRetry
+task.spawn(function()
+    while task.wait(1) do
+        if _G.AutoRetry then
+            if _G.AutoBonusBoss then
+                -- Nếu bonus có sẵn thì ưu tiên vote trước khi retry
+                local bonusAvailable = false
+                for _, remote in pairs(ReplicatedStorage:GetChildren()) do
+                    if remote.Name == "dataRemoteEvent" then
+                        bonusAvailable = true
+                        break
+                    end
+                end
+
+                if bonusAvailable then
+                    dataRemoteEvent:FireServer({
+                        {
+                            ["\3"] = "vote",
+                            vote = "bonus"
+                        },
+                        "-"
+                    })
+                    task.wait(1.5) -- Đợi xử lý bonus
+                end
+            end
+
+            -- Tiếp tục auto retry bình thường
+            pcall(function()
+                local retryRemote = ReplicatedStorage:FindFirstChild("retryRemoteEvent") or ReplicatedStorage:FindFirstChild("Retry")
+                if retryRemote then
+                    retryRemote:FireServer()
+                end
+            end)
+        end
+    end
+end)
+
+
+
 local Toggle = MiscTab:CreateToggle({
 	Name = "Auto Retry",
 	CurrentValue = false,
