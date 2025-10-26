@@ -355,7 +355,7 @@ local RunService = game:GetService("RunService")
 -- ⚙️ Cấu hình
 local tweenSpeed = 10
 local hoverHeight = 0
-local maxRange = 800
+local maxRange = 1500
 local teleportDistance = 15
 local teleportDelay = 1.25
 local orbitRadius = 20
