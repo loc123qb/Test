@@ -345,7 +345,7 @@ end)
 -- ========= END =========
 
 
---// 🌊 Auto Farm Hover Tween - Smart Behind NPC (All Dungeon Quest Maps)
+--// 🌊 Auto Farm Teleport - Safe Behind + Smart Boss Reaction (All Dungeon Quest Maps)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -354,12 +354,12 @@ local LocalPlayer = Players.LocalPlayer
 _G.AutoTween = false
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 55
-local hoverHeight = 0
-local teleportDistance = 8
-local preTeleportRange = 50
-local updateDelay = 1.25
+local hoverHeight = 2
+local teleportDistance = 10
+local preTeleportRange = 60
+local updateDelay = 1
 local maxRange = 4000
+local safeHeight = 5 -- độ cao đứng an toàn
 
 local currentTarget = nil
 local reacting = false
@@ -381,12 +381,18 @@ local function isPlayerModel(model)
 	return false
 end
 
+-- 🧍 Kiểm tra NPC đã spawn hoàn chỉnh
 local function isNPCReady(npc)
 	local hum, hrp = getHumanoidAndRoot(npc)
-	return hum and hrp and hum.Health > 0
+	if not hum or not hrp or hum.Health <= 0 then return false end
+
+	-- kiểm tra có đứng trên mặt đất không
+	local ray = Ray.new(hrp.Position, Vector3.new(0, -15, 0))
+	local hit = Workspace:FindPartOnRay(ray, npc)
+	return hit ~= nil
 end
 
--- 🔍 Tìm NPC gần nhất hoặc boss
+-- 🔍 Tìm NPC gần nhất (ưu tiên boss)
 local function getNearestNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -402,8 +408,8 @@ local function getNearestNPC()
 			if hum and hrp and hum.Health > 0 then
 				local dist = (hrp.Position - root.Position).Magnitude
 				if dist < maxRange then
-					local nameLower = v.Name:lower()
-					if nameLower:find("boss") or nameLower:find("king") or nameLower:find("guardian") or nameLower:find("lord") or nameLower:find("beast") then
+					local n = v.Name:lower()
+					if n:find("boss") or n:find("king") or n:find("guardian") or n:find("lord") or n:find("beast") then
 						if dist < bossDist then
 							bossDist = dist
 							bossTarget = v
@@ -420,69 +426,79 @@ local function getNearestNPC()
 	return bossTarget or nearest
 end
 
--- 🌀 Tween mượt ra sau NPC
-local function tweenToBehind(target, fast)
+-- 🧍 Đặt nhân vật lên nền an toàn (tránh rơi xuống vực)
+local function ensureSafeGround(pos)
+	local ray = Ray.new(pos + Vector3.new(0, 10, 0), Vector3.new(0, -50, 0))
+	local hit, hitPos = Workspace:FindPartOnRay(ray)
+	if hit then
+		return Vector3.new(hitPos.X, hitPos.Y + safeHeight, hitPos.Z)
+	else
+		-- nếu không có mặt đất -> giữ nguyên Y hiện tại
+		return Vector3.new(pos.X, pos.Y + safeHeight, pos.Z)
+	end
+end
+
+-- 🚀 Teleport ra sau NPC (tránh đòn)
+local function teleportBehind(npc)
 	local char = LocalPlayer.Character
 	if not char then return end
 	local hum, root = getHumanoidAndRoot(char)
 	if not (hum and root) then return end
 
-	local _, npcRoot = getHumanoidAndRoot(target)
+	local _, npcRoot = getHumanoidAndRoot(npc)
 	if not npcRoot then return end
 
 	local behindDir = -npcRoot.CFrame.LookVector
 	local targetPos = npcRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
-	local dist = (root.Position - targetPos).Magnitude
-	local duration = math.clamp(dist / (fast and tweenSpeed * 2 or tweenSpeed), 0.05, 1.2)
-
-	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, npcRoot.Position) })
-	tween:Play()
-	tween.Completed:Wait()
+	targetPos = ensureSafeGround(targetPos)
+	root.CFrame = CFrame.new(targetPos, npcRoot.Position)
 end
 
-local function teleportNear(target)
+-- 🚶 Teleport gần NPC trước khi farm
+local function teleportNear(npc)
 	local char = LocalPlayer.Character
 	if not char then return end
 	local hum, root = getHumanoidAndRoot(char)
 	if not (hum and root) then return end
 
-	local _, npcRoot = getHumanoidAndRoot(target)
+	local _, npcRoot = getHumanoidAndRoot(npc)
 	if not npcRoot then return end
 
 	local dir = (npcRoot.Position - root.Position).Unit
 	local targetPos = npcRoot.Position - dir * preTeleportRange + Vector3.new(0, hoverHeight, 0)
+	targetPos = ensureSafeGround(targetPos)
 	root.CFrame = CFrame.new(targetPos, npcRoot.Position)
 end
 
--- ⚡️ Khi boss bắt đầu cử động hoặc charge skill
+-- ⚡ Theo dõi boss charge skill hoặc cử động mạnh
 local function setupBossReaction(npc)
 	local hum, root = getHumanoidAndRoot(npc)
 	if not hum or not root then return end
 
-	-- Xóa connection cũ
 	if npc:FindFirstChild("__ReactionConn") then
 		npc.__ReactionConn:Disconnect()
 		npc.__ReactionConn = nil
 	end
 
-	-- Theo dõi animation hoặc movement
 	local conn
-	conn = hum.Running:Connect(function(speed)
-		if _G.AutoTween and currentTarget == npc and speed > 0.1 and not reacting then
-			reacting = true
-			task.spawn(function()
-				tweenToBehind(npc, true) -- tween nhanh ra sau lưng boss
-				task.wait(0.5)
-				reacting = false
-			end)
+	conn = hum.AnimationPlayed:Connect(function(anim)
+		if _G.AutoTween and currentTarget == npc and not reacting then
+			local animName = anim.Animation and anim.Animation.Name:lower() or ""
+			if animName:find("attack") or animName:find("charge") or animName:find("slam") or animName:find("cast") or animName:find("roar") then
+				reacting = true
+				task.spawn(function()
+					teleportBehind(npc)
+					task.wait(0.8)
+					reacting = false
+				end)
+			end
 		end
 	end)
 
 	npc.__ReactionConn = conn
 end
 
--- 🔁 Auto Farm
+-- 🔁 Auto Farm Loop
 task.spawn(function()
 	while task.wait(updateDelay) do
 		if _G.AutoTween then
@@ -496,11 +512,14 @@ task.spawn(function()
 				local _, root = getHumanoidAndRoot(LocalPlayer.Character)
 				if npcRoot and root then
 					local dist = (root.Position - npcRoot.Position).Magnitude
-					if dist > preTeleportRange * 2 then
+					if dist > preTeleportRange * 1.5 then
 						teleportNear(npc)
-						task.wait(0.3)
+						task.wait(0.4)
 					end
-					tweenToBehind(npc)
+					-- chỉ teleport nếu boss đã hoàn chỉnh
+					if isNPCReady(npc) then
+						teleportBehind(npc)
+					end
 				end
 			end
 		end
@@ -509,7 +528,7 @@ end)
 
 -- 🪄 Toggle Rayfield
 local ToggleFarm = Tab:CreateToggle({
-	Name = "Auto Farm (Smart Behind + Boss Reaction)",
+	Name = "Auto Farm (Teleport + Smart Boss Reaction)",
 	CurrentValue = false,
 	Flag = "ToggleAutoFarm",
 	Callback = function(Value)
@@ -522,7 +541,7 @@ local ToggleFarm = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Di chuyển mượt & né kỹ năng boss tự động.")
+			warn("[AUTO-FARM] ✅ Đã bật: Teleport thông minh + Né kỹ năng boss + Giữ mặt đất an toàn.")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -531,6 +550,39 @@ local ToggleFarm = Tab:CreateToggle({
 	end
 })
 
+
+
+
+local Toggle = MiscTab:CreateToggle({
+	Name = "Auto Start",
+	CurrentValue = false,
+	Flag = "Toggle_AutoStart",
+	Callback = function(Value)
+		_G.AutoStart = Value
+
+		if _G.AutoStart then
+			warn("✅ Auto Start ĐÃ BẬT")
+
+			-- 🔁 Chạy liên tục cho đến khi tắt
+			task.spawn(function()
+            repeat task.wait() until _G.ComboDone == true
+
+				while _G.AutoStart do
+					-- ⚡ Gửi lệnh start
+					game:GetService("ReplicatedStorage").remotes.changeStartValue:FireServer()
+					warn("🔁 Auto Start đang thực thi...")
+
+					-- ⏱ Chờ 1–2 giây để tránh spam server
+					task.wait(2)
+				end
+				warn("⛔ Auto Start ĐÃ DỪNG")
+			end)
+
+		else
+			warn("⛔ Auto Start ĐÃ TẮT THỦ CÔNG")
+		end
+	end,
+})
 
 
 --// 🧩 Auto Bonus Boss
