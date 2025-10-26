@@ -345,7 +345,7 @@ end)
 -- ========= END =========
 
 
---// 🌊 Auto Farm Hover Tween - Smooth Circle + Auto Dodge Zone (AOE) - Optimized for Dungeon Quest
+--// 🌊 Auto Farm Hover Tween - Smooth Behind NPC (All Dungeon Quest Maps)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -353,20 +353,13 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 10
+local tweenSpeed = 55
 local hoverHeight = 0
+local teleportDistance = 8
+local updateDelay = 1.25
 local maxRange = 4000
-local teleportDistance = 15
-local teleportDelay = 1.25
-local orbitRadius = 20
-local orbitDuration = 3
-local dodgeDistance = 20
-local dodgeDetectRange = 30
-local dodgeCooldown = 1.2
 
 _G.AutoTween = false
-_G.AutoDodgeZone = false
-_G.ComboDone = _G.ComboDone or true -- đảm bảo loop hoạt động nếu không có combo
 
 -- 🧠 Hàm hỗ trợ
 local function getHumanoidAndRoot(model)
@@ -385,90 +378,37 @@ local function isPlayerModel(model)
 	return false
 end
 
--- 🧍 Kiểm tra NPC đã spawn hoàn chỉnh (đứng trên mặt đất)
-local function isNPCReady(npc)
-	local hum, hrp = getHumanoidAndRoot(npc)
-	if not (hum and hrp) then return false end
-	if hum.Health <= 0 then return false end
-
-	-- Kiểm tra nếu HRP ở dưới map hoặc chưa chạm đất
-	local ray = Ray.new(hrp.Position, Vector3.new(0, -10, 0))
-	local hit = Workspace:FindPartOnRay(ray, npc)
-	if not hit then return false end
-
-	-- thêm kiểm tra Y hợp lý
-	if hrp.Position.Y < -50 then return false end
-
-	return true
-end
-
--- 🔍 Tìm NPC hợp lệ toàn map Dungeon Quest (ưu tiên boss trước)
-local function getPriorityNPC()
+-- 🔍 Ưu tiên Boss trước, sau đó mới đến quái gần nhất
+local function getNearestNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
 	local _, root = getHumanoidAndRoot(char)
 	if not root then return end
 
-	-- folder khả dụng - bao phủ nhiều map
-	local possibleFolders = {
-		"Enemies","Mobs","Live","Boss","Bosses","Dungeon","Hostiles","Monsters","ActiveEnemies","ActiveBosses"
-	}
+	local npcFolders = {Workspace:FindFirstChild("Enemies"), Workspace:FindFirstChild("Mobs")}
+	local nearestBoss, nearestEnemy
+	local shortestBoss, shortestEnemy = math.huge, math.huge
 
-	-- gom các Model từ các folder nếu có
-	local allNPCs = {}
-	for _, name in ipairs(possibleFolders) do
-		local folder = Workspace:FindFirstChild(name)
-		if folder and (folder:IsA("Folder") or folder:IsA("Model")) then
-			for _, v in ipairs(folder:GetDescendants()) do
-				if v:IsA("Model") then
-					allNPCs[#allNPCs + 1] = v
-				end
-			end
-		elseif Workspace:FindFirstChild("Dungeon") and Workspace.Dungeon:FindFirstChild(name) then
-			local sub = Workspace.Dungeon[name]
-			for _, v in ipairs(sub:GetDescendants()) do
-				if v:IsA("Model") then
-					allNPCs[#allNPCs + 1] = v
-				end
-			end
-		end
-	end
-
-	-- fallback: nếu chưa có gì, lấy descendants toàn workspace (ít ưu tiên)
-	if #allNPCs == 0 then
-		for _, v in ipairs(Workspace:GetDescendants()) do
-			if v:IsA("Model") then
-				allNPCs[#allNPCs + 1] = v
-			end
-		end
-	end
-
-	local targetBoss, targetMini, targetNormal
-	local farthestBoss, farthestMini, farthestNormal = 0, 0, 0
-
-	for _, v in ipairs(allNPCs) do
-		if v and v:IsA("Model") and v ~= char and not isPlayerModel(v) then
-			local hum, hrp = getHumanoidAndRoot(v)
-			if hum and hrp and hum.Health > 0 and isNPCReady(v) then
-				local dist = (hrp.Position - root.Position).Magnitude
-				if dist < maxRange then
-					local n = (v.Name or ""):lower()
-
-					-- Ưu tiên boss keywords (mở rộng)
-					if n:find("final") or n:find("boss") or n:find("guardian") or n:find("king") or n:find("demon") or n:find("overlord") then
-						if dist > farthestBoss then
-							farthestBoss = dist
-							targetBoss = v
-						end
-					elseif n:find("mini") or n:find("elite") or n:find("champion") or n:find("ceremonial") then
-						if dist > farthestMini then
-							farthestMini = dist
-							targetMini = v
-						end
-					else
-						if dist > farthestNormal then
-							farthestNormal = dist
-							targetNormal = v
+	for _, folder in ipairs(npcFolders) do
+		if folder then
+			for _, v in ipairs(folder:GetChildren()) do
+				if v:IsA("Model") and v ~= char then
+					local hum, hrp = getHumanoidAndRoot(v)
+					if hum and hrp and hum.Health > 0 and not isPlayerModel(v) then
+						local dist = (hrp.Position - root.Position).Magnitude
+						if dist < maxRange then
+							local lowerName = v.Name:lower()
+							if lowerName:find("boss") or lowerName:find("king") or lowerName:find("beast") then
+								if dist < shortestBoss then
+									shortestBoss = dist
+									nearestBoss = v
+								end
+							else
+								if dist < shortestEnemy then
+									shortestEnemy = dist
+									nearestEnemy = v
+								end
+							end
 						end
 					end
 				end
@@ -476,297 +416,51 @@ local function getPriorityNPC()
 		end
 	end
 
-	return targetBoss or targetMini or targetNormal
+	return nearestBoss or nearestEnemy
 end
 
--- 🛡️ Hỗ trợ reset an toàn
-local function safeResetToGround(root)
-	if not root then return end
-	local pos = root.Position
-	if pos.Y < -20 then
-		root.CFrame = CFrame.new(pos.X, 5, pos.Z)
-		warn("[SAFE] Reset vị trí an toàn.")
-	end
-end
-
--- 🌀 Di chuyển mượt: sử dụng fakeRoot + CFrame:Lerp để tránh spam CFrame
-local lastTweenTime = 0
-local function tweenTo(target)
-	if not _G.AutoTween then return end
+-- 🌀 Tween mượt tới phía sau quái
+local function tweenToTarget(target)
 	local char = LocalPlayer.Character
 	if not char then return end
 	local hum, root = getHumanoidAndRoot(char)
-	if not root then return end
+	if not hum or not root then return end
 	if not target then return end
 
 	local _, targetRoot = getHumanoidAndRoot(target)
 	if not targetRoot then return end
-	if not isNPCReady(target) then return end
 
-	-- giới hạn tần suất tween (đỡ spam)
-	local minInterval = math.max(teleportDelay, 1.25)
-	if tick() - lastTweenTime < minInterval then return end
-	lastTweenTime = tick()
-
-	-- chờ 1.25s (hoặc teleportDelay) trước khi di chuyển (giữ an toàn)
-	task.wait(teleportDelay)
-
-	-- tính vị trí phía sau (safe)
+	-- Tính vị trí phía sau quái
 	local behindDir = -targetRoot.CFrame.LookVector
-	local desiredPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
+	local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
 
-	-- kiểm tra vị trí hợp lệ
-	if (desiredPos - root.Position).Magnitude > 2000 or desiredPos.Y < -50 or desiredPos.Y > 300 then
-		-- bất thường -> abort
-		return
-	end
-
-	-- tạo fakeRoot anchored để tween
-	local fakeRoot = Instance.new("Part")
-	fakeRoot.Size = Vector3.new(2,2,2)
-	fakeRoot.Transparency = 1
-	fakeRoot.CanCollide = false
-	fakeRoot.Anchored = true
-	fakeRoot.CFrame = root.CFrame
-	fakeRoot.Parent = Workspace
-
-	-- tween fakeRoot tới vị trí mong muốn (kéo dài, mượt)
-	local tweenInfo = TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-	local t = TweenService:Create(fakeRoot, tweenInfo, { CFrame = CFrame.new(desiredPos, targetRoot.Position) })
-	t:Play()
-
-	-- cập nhật root mỗi Heartbeat bằng Lerp (giảm giật, tránh bị kick)
-	local conn
-	conn = RunService.Heartbeat:Connect(function()
-		if not _G.AutoTween then
-			conn:Disconnect()
-			return
-		end
-		if not fakeRoot or not fakeRoot.Parent then
-			conn:Disconnect()
-			return
-		end
-		-- Lerp CFrame để mượt, alpha nhỏ tránh nhảy
-		local cur = root.CFrame
-		local goal = fakeRoot.CFrame
-		root.CFrame = cur:Lerp(goal, 0.35) -- 0.35 là tốc độ bắt kịp, nhỏ hơn => mượt hơn
-		-- đảm bảo không rơi nhanh
-		safeResetToGround(root)
-	end)
-
-	t.Completed:Wait()
-	if conn and conn.Connected then conn:Disconnect() end
-
-	-- sau khi tween xong: neo an toàn phía sau boss
-	local function keepBehindLoop()
-		local keepConn
-		keepConn = RunService.Heartbeat:Connect(function()
-			if not _G.AutoTween then
-				keepConn:Disconnect()
-				if fakeRoot and fakeRoot.Parent then fakeRoot:Destroy() end
-				return
-			end
-			if not (target and target.Parent) then
-				keepConn:Disconnect()
-				if fakeRoot and fakeRoot.Parent then fakeRoot:Destroy() end
-				return
-			end
-			local _, tRoot = getHumanoidAndRoot(target)
-			if not tRoot then
-				keepConn:Disconnect()
-				if fakeRoot and fakeRoot.Parent then fakeRoot:Destroy() end
-				return
-			end
-
-			local behind = -tRoot.CFrame.LookVector
-			local stayPos = tRoot.Position + behind * teleportDistance + Vector3.new(0, hoverHeight, 0)
-
-			-- chỉ điều chỉnh nhẹ nếu hướng boss đổi nhanh (tránh teleport mạnh)
-			local diff = (stayPos - root.Position).Magnitude
-			if diff < 60 then
-				local cur = root.CFrame
-				root.CFrame = cur:Lerp(CFrame.new(stayPos, tRoot.Position), 0.35)
-			else
-				-- nếu boss dịch chuyển quá xa, không ép theo để tránh bị kick; sẽ chờ lần tween tiếp theo
-			end
-
-			-- reset nếu rơi
-			safeResetToGround(root)
-		end)
-		-- dừng sau khi _G.AutoTween = false hoặc target biến mất
-		-- keepConn tự dừng trong body trên
-	end
-
-	keepBehindLoop()
-
-	-- destroy fakeRoot sau 0.5s (nếu còn)
-	task.delay(0.5, function()
-		if fakeRoot and fakeRoot.Parent then fakeRoot:Destroy() end
-	end)
-end
-
--- 🔎 Phát hiện telegraph/zone mới trong workspace và tween ra sau quái (auto dodge timing)
-local activeZoneDodge = false
-local detectedZones = setmetatable({}, {__mode = "k"})
-
-local function isRedColor(c)
-	if not c then return false end
-	return (c.R > 0.4 and c.G < 0.3 and c.B < 0.3)
-end
-
-local function isDangerPart(part)
-	if not part or not part:IsA("BasePart") then return false end
-	local n = (part.Name or ""):lower()
-	if n:find("zone") or n:find("aoe") or n:find("telegraph") or n:find("warning") or n:find("indicator") or n:find("attack") then
-		return true
-	end
-	if isRedColor(part.Color) and part.Transparency < 0.7 then
-		return true
-	end
-	-- shape/mesh heuristics: large flat parts on ground often telegraph
-	if part.Size and (part.Size.X > 3 or part.Size.Z > 3) and part.Position.Y < 10 then
-		-- additional check: name contains nothing but it's big and near ground -> possibly telegraph
-		return true
-	end
-	return false
-end
-
-local function moveBehindNPCOfPart(part)
-	if not _G.AutoTween then return end
-	if activeZoneDodge then return end
-	activeZoneDodge = true
-
-	-- tìm npc gần part nhất (trong folder NPC)
-	local nearestNPC = nil
-	local nearestDist = 1e9
-	-- use getPriorityNPC list scan folders quickly
-	local possibleFolders = {"Enemies","Mobs","Live","Boss","Bosses","Dungeon","Hostiles","Monsters","ActiveEnemies","ActiveBosses"}
-	local candidates = {}
-	for _, name in ipairs(possibleFolders) do
-		local folder = Workspace:FindFirstChild(name)
-		if folder then
-			for _, c in ipairs(folder:GetChildren()) do
-				if c:IsA("Model") then candidates[#candidates+1] = c end
-			end
-		end
-	end
-	if #candidates == 0 then
-		for _, c in ipairs(Workspace:GetDescendants()) do
-			if c:IsA("Model") then candidates[#candidates+1] = c end
-		end
-	end
-
-	for _, cand in ipairs(candidates) do
-		local hum, hrp = getHumanoidAndRoot(cand)
-		if hum and hrp and hum.Health > 0 then
-			local dist = (hrp.Position - part.Position).Magnitude
-			if dist < nearestDist then
-				nearestDist = dist
-				nearestNPC = cand
-			end
-		end
-	end
-
-	-- nếu gần NPC trong khoảng hợp lý thì tween ra sau nó
-	if nearestNPC and nearestDist < 120 then
-		-- tween ra phía sau nearestNPC
-		local _, npcRoot = getHumanoidAndRoot(nearestNPC)
-		if npcRoot then
-			local char = LocalPlayer.Character
-			if not char then activeZoneDodge = false return end
-			local hum, root = getHumanoidAndRoot(char)
-			if not root then activeZoneDodge = false return end
-
-			local behindDir = -npcRoot.CFrame.LookVector
-			local dodgePos = root.Position + behindDir * dodgeDistance + Vector3.new(0, 2, 0)
-			-- clamp dodgePos to ground
-			local ray = Ray.new(dodgePos + Vector3.new(0,5,0), Vector3.new(0,-50,0))
-			local hit, hitpos = Workspace:FindPartOnRay(ray)
-			if hit and hitpos then dodgePos = Vector3.new(dodgePos.X, hitpos.Y + 1.5, dodgePos.Z) end
-
-			-- Tween nhẹ nhàng
-			local tweenInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-			local tw = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(dodgePos)})
-			tw:Play()
-			tw.Completed:Wait()
-		end
-	end
-
-	-- cooldown nhỏ trước khi cho phép dodge tiếp
-	task.delay(0.6, function() activeZoneDodge = false end)
-end
-
--- lắng nghe thêm part mới (kỹ năng telegraph/zone)
-Workspace.DescendantAdded:Connect(function(obj)
-	-- small guard
-	if not obj or not obj:IsA("BasePart") then return end
-	-- detect quickly
-	if isDangerPart(obj) then
-		-- tránh duplicate
-		if detectedZones[obj] then return end
-		detectedZones[obj] = true
-		task.defer(function()
-			-- nếu auto dodge zone tắt thì thôi
-			if not _G.AutoDodgeZone then return end
-			-- nếu player ở quá xa thì ignore
-			local char = LocalPlayer.Character
-			if not char then return end
-			local _, root = getHumanoidAndRoot(char)
-			if not root then return end
-			local dist = (obj.Position - root.Position).Magnitude
-			if dist > 120 then return end
-			-- move behind relevant NPC
-			moveBehindNPCOfPart(obj)
-		end)
-	end
-end)
-
--- ⚡ Auto Dodge Zone (fallback scan, dự phòng)
-local lastDodge = 0
-local isDodging = false
-local function autoDodgeZone()
-	if not _G.AutoDodgeZone or isDodging then return end
-	if tick() - lastDodge < dodgeCooldown then return end
-
-	local char = LocalPlayer.Character
-	if not char then return end
-	local hum, root = getHumanoidAndRoot(char)
-	if not root then return end
-
-	-- scan existing large parts that look dangerous
-	for _, v in ipairs(Workspace:GetDescendants()) do
-		if v:IsA("BasePart") and v.Parent and not isPlayerModel(v.Parent) and isDangerPart(v) then
-			local dist = (v.Position - root.Position).Magnitude
-			if dist < dodgeDetectRange then
-				isDodging = true
-				lastDodge = tick()
-				-- try move behind that part's nearest NPC
-				moveBehindNPCOfPart(v)
-				isDodging = false
-				break
-			end
-		end
-	end
+	-- Tween di chuyển mượt (không teleport thẳng)
+	local dist = (root.Position - targetPos).Magnitude
+	local duration = dist / tweenSpeed
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos) })
+	tween:Play()
+	tween.Completed:Wait()
 end
 
 -- 🔁 Auto Farm Loop
 task.spawn(function()
-	repeat task.wait() until _G.ComboDone == true
-	while task.wait(0.25) do
+	while task.wait(updateDelay) do
 		if _G.AutoTween then
-			-- auto dodge via listener/fallback
-			autoDodgeZone()
-			local npc = getPriorityNPC()
+			local npc = getNearestNPC()
 			if npc then
-				tweenTo(npc)
+				local hum, hrp = getHumanoidAndRoot(npc)
+				if hum and hrp and hum.Health > 0 then
+					tweenToTarget(npc)
+				end
 			end
 		end
 	end
 end)
 
--- 🪄 Rayfield Toggle (thêm vào Tab "Home")
+-- 🪄 Toggle Auto Farm (Rayfield)
 local ToggleFarm = Tab:CreateToggle({
-	Name = "Auto Farm (Ưu tiên Boss)",
+	Name = "Auto Farm (Smooth Behind NPC)",
 	CurrentValue = false,
 	Flag = "ToggleAutoFarm",
 	Callback = function(Value)
@@ -779,25 +473,11 @@ local ToggleFarm = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Ưu tiên Boss, tween mượt và an toàn.")
+			warn("[AUTO-FARM] ✅ Đã bật: Di chuyển mượt phía sau quái (ưu tiên Boss).")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 			warn("[AUTO-FARM] ⛔ Đã tắt.")
-		end
-	end
-})
-
-local ToggleDodge = Tab:CreateToggle({
-	Name = "Auto Dodge Zone (AOE)",
-	CurrentValue = false,
-	Flag = "ToggleAutoDodgeZone",
-	Callback = function(Value)
-		_G.AutoDodgeZone = Value
-		if Value then
-			warn("[AUTO-DODGE] ✅ Đã bật: Né vùng đỏ (AOE).")
-		else
-			warn("[AUTO-DODGE] ⛔ Đã tắt.")
 		end
 	end
 })
