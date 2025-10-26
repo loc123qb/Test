@@ -423,7 +423,8 @@ local function getFarthestNPC()
 	return farthest
 end
 
--- 🌀 Di chuyển đến sau boss và giữ yên một chỗ cố định, mượt và tránh bị kick
+-- 🌀 Di chuyển đến sau boss và giữ yên một chỗ cố định, tránh spam tween & kick
+local lastTweenTime = 0
 local function tweenTo(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -435,51 +436,54 @@ local function tweenTo(target)
 	if not targetRoot then return end
 	if not isNPCReady(target) then return end
 
+	-- Nếu mới tween < 2s trước thì bỏ qua
+	if tick() - lastTweenTime < 2 then return end
+	lastTweenTime = tick()
+
 	task.wait(teleportDelay)
 
 	local behindDir = -targetRoot.CFrame.LookVector
 	local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
 
-	-- Nếu vị trí quá xa hoặc bất thường → bỏ qua
-	if (targetPos - root.Position).Magnitude > 500 or targetPos.Y < -50 then return end
+	-- Nếu vị trí bất thường hoặc xa quá thì bỏ qua
+	if (targetPos - root.Position).Magnitude > 600 or targetPos.Y < -50 or targetPos.Y > 300 then return end
 
-	local tweenInfo = TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	-- 🕐 Di chuyển chậm, mượt để không bị anti-cheat phát hiện
+	local tweenInfo = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, targetRoot.Position) })
 	tween:Play()
 	tween.Completed:Wait()
 
-	-- Giữ vị trí phía sau boss, tránh bị rơi hoặc giật
+	-- 🧍 Giữ vị trí ổn định phía sau boss
 	task.spawn(function()
-		local stayTime = tick()
 		while _G.AutoTween and target and isNPCReady(target) do
-			-- Nếu đứng yên hơn 1.25s thì mới di chuyển lại
-			if tick() - stayTime >= 1.25 then
-				local _, tRoot = getHumanoidAndRoot(target)
-				if not tRoot then break end
+			local _, tRoot = getHumanoidAndRoot(target)
+			if not tRoot then break end
 
-				local behind = -tRoot.CFrame.LookVector
-				local newPos = tRoot.Position + behind * teleportDistance + Vector3.new(0, hoverHeight, 0)
+			local behind = -tRoot.CFrame.LookVector
+			local stayPos = tRoot.Position + behind * teleportDistance + Vector3.new(0, hoverHeight, 0)
 
-				if (newPos - root.Position).Magnitude < 300 and newPos.Y > -30 then
-					local info = TweenInfo.new(1.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-					local safeTween = TweenService:Create(root, info, { CFrame = CFrame.new(newPos, tRoot.Position) })
-					safeTween:Play()
-					safeTween.Completed:Wait()
-				end
-
-				stayTime = tick()
+			-- Nếu boss xoay hướng nhanh → chỉ điều chỉnh nhẹ, không teleport mạnh
+			if (stayPos - root.Position).Magnitude < 50 then
+				root.CFrame = CFrame.new(stayPos, tRoot.Position)
 			end
 
-			-- Chống rơi & reset tư thế
+			-- Reset vị trí an toàn nếu rớt khỏi map
+			if root.Position.Y < -20 then
+				root.CFrame = CFrame.new(root.Position.X, 5, root.Position.Z)
+				warn("[SAFE TELEPORT] Đã reset vị trí an toàn.")
+			end
+
 			if hum and hum.Health > 0 then
 				hum.PlatformStand = true
 				hum:ChangeState(Enum.HumanoidStateType.Physics)
 			end
 
-			task.wait(0.1)
+			task.wait(0.25)
 		end
 	end)
 end
+
 
 
 -- ⚡ Auto Dodge Zone (né vùng đỏ AOE)
