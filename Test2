@@ -345,11 +345,13 @@ end)
 -- ========= END =========
 
 
---// 🌊 Auto Farm Hover Tween - Smooth Behind NPC (Stable All DQ Maps)
+--// 🌊 Auto Farm Hover Tween - Smart Behind NPC (All Dungeon Quest Maps)
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
 local Workspace = game:GetService("Workspace")
+
+local LocalPlayer = Players.LocalPlayer
+_G.AutoTween = false
 
 -- ⚙️ Cấu hình
 local tweenSpeed = 55
@@ -359,7 +361,8 @@ local preTeleportRange = 50
 local updateDelay = 1.25
 local maxRange = 4000
 
-_G.AutoTween = false
+local currentTarget = nil
+local reacting = false
 
 -- 🧠 Hàm hỗ trợ
 local function getHumanoidAndRoot(model)
@@ -378,15 +381,12 @@ local function isPlayerModel(model)
 	return false
 end
 
--- 🧍 NPC hợp lệ (đã spawn & có humanoid)
 local function isNPCReady(npc)
 	local hum, hrp = getHumanoidAndRoot(npc)
-	if not (hum and hrp) then return false end
-	if hum.Health <= 0 then return false end
-	return true
+	return hum and hrp and hum.Health > 0
 end
 
--- 🔍 Quét toàn map để lấy NPC (ưu tiên boss, sau đó gần nhất)
+-- 🔍 Tìm NPC gần nhất hoặc boss
 local function getNearestNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -399,7 +399,7 @@ local function getNearestNPC()
 	for _, v in ipairs(Workspace:GetDescendants()) do
 		if v:IsA("Model") and not isPlayerModel(v) and v ~= char then
 			local hum, hrp = getHumanoidAndRoot(v)
-			if hum and hrp and hum.Health > 0 and isNPCReady(v) then
+			if hum and hrp and hum.Health > 0 then
 				local dist = (hrp.Position - root.Position).Magnitude
 				if dist < maxRange then
 					local nameLower = v.Name:lower()
@@ -420,7 +420,27 @@ local function getNearestNPC()
 	return bossTarget or nearest
 end
 
--- 🚀 Teleport chuẩn bị (đến điểm cách NPC 50 studs)
+-- 🌀 Tween mượt ra sau NPC
+local function tweenToBehind(target, fast)
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum, root = getHumanoidAndRoot(char)
+	if not (hum and root) then return end
+
+	local _, npcRoot = getHumanoidAndRoot(target)
+	if not npcRoot then return end
+
+	local behindDir = -npcRoot.CFrame.LookVector
+	local targetPos = npcRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
+	local dist = (root.Position - targetPos).Magnitude
+	local duration = math.clamp(dist / (fast and tweenSpeed * 2 or tweenSpeed), 0.05, 1.2)
+
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, npcRoot.Position) })
+	tween:Play()
+	tween.Completed:Wait()
+end
+
 local function teleportNear(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -435,33 +455,43 @@ local function teleportNear(target)
 	root.CFrame = CFrame.new(targetPos, npcRoot.Position)
 end
 
--- 🌀 Tween cực mượt ra sau lưng NPC
-local function tweenToBehind(target)
-	local char = LocalPlayer.Character
-	if not char then return end
-	local hum, root = getHumanoidAndRoot(char)
-	if not (hum and root) then return end
+-- ⚡️ Khi boss bắt đầu cử động hoặc charge skill
+local function setupBossReaction(npc)
+	local hum, root = getHumanoidAndRoot(npc)
+	if not hum or not root then return end
 
-	local _, npcRoot = getHumanoidAndRoot(target)
-	if not npcRoot then return end
+	-- Xóa connection cũ
+	if npc:FindFirstChild("__ReactionConn") then
+		npc.__ReactionConn:Disconnect()
+		npc.__ReactionConn = nil
+	end
 
-	local behindDir = -npcRoot.CFrame.LookVector
-	local targetPos = npcRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
-	local dist = (root.Position - targetPos).Magnitude
-	local duration = math.clamp(dist / tweenSpeed, 0.15, 1.5)
+	-- Theo dõi animation hoặc movement
+	local conn
+	conn = hum.Running:Connect(function(speed)
+		if _G.AutoTween and currentTarget == npc and speed > 0.1 and not reacting then
+			reacting = true
+			task.spawn(function()
+				tweenToBehind(npc, true) -- tween nhanh ra sau lưng boss
+				task.wait(0.5)
+				reacting = false
+			end)
+		end
+	end)
 
-	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, npcRoot.Position) })
-	tween:Play()
-	tween.Completed:Wait()
+	npc.__ReactionConn = conn
 end
 
--- 🔁 Auto Farm Loop
+-- 🔁 Auto Farm
 task.spawn(function()
 	while task.wait(updateDelay) do
 		if _G.AutoTween then
 			local npc = getNearestNPC()
-			if npc then
+			if npc and isNPCReady(npc) then
+				if npc ~= currentTarget then
+					currentTarget = npc
+					setupBossReaction(npc)
+				end
 				local _, npcRoot = getHumanoidAndRoot(npc)
 				local _, root = getHumanoidAndRoot(LocalPlayer.Character)
 				if npcRoot and root then
@@ -477,9 +507,9 @@ task.spawn(function()
 	end
 end)
 
--- 🪄 Rayfield Toggle
+-- 🪄 Toggle Rayfield
 local ToggleFarm = Tab:CreateToggle({
-	Name = "Auto Farm (Smooth Behind NPC)",
+	Name = "Auto Farm (Smart Behind + Boss Reaction)",
 	CurrentValue = false,
 	Flag = "ToggleAutoFarm",
 	Callback = function(Value)
@@ -492,50 +522,15 @@ local ToggleFarm = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Bật: Di chuyển mượt tới NPC & đứng sau lưng an toàn.")
+			warn("[AUTO-FARM] ✅ Đã bật: Di chuyển mượt & né kỹ năng boss tự động.")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-			warn("[AUTO-FARM] ⛔ Tắt.")
+			warn("[AUTO-FARM] ⛔ Đã tắt.")
 		end
 	end
 })
 
-
-
-
-
-
-local Toggle = MiscTab:CreateToggle({
-	Name = "Auto Start",
-	CurrentValue = false,
-	Flag = "Toggle_AutoStart",
-	Callback = function(Value)
-		_G.AutoStart = Value
-
-		if _G.AutoStart then
-			warn("✅ Auto Start ĐÃ BẬT")
-
-			-- 🔁 Chạy liên tục cho đến khi tắt
-			task.spawn(function()
-            repeat task.wait() until _G.ComboDone == true
-
-				while _G.AutoStart do
-					-- ⚡ Gửi lệnh start
-					game:GetService("ReplicatedStorage").remotes.changeStartValue:FireServer()
-					warn("🔁 Auto Start đang thực thi...")
-
-					-- ⏱ Chờ 1–2 giây để tránh spam server
-					task.wait(2)
-				end
-				warn("⛔ Auto Start ĐÃ DỪNG")
-			end)
-
-		else
-			warn("⛔ Auto Start ĐÃ TẮT THỦ CÔNG")
-		end
-	end,
-})
 
 
 --// 🧩 Auto Bonus Boss
