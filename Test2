@@ -397,34 +397,77 @@ local function isNPCReady(npc)
 	return true
 end
 
--- 🔍 Ưu tiên Boss trước, nếu không có Boss thì lấy NPC xa nhất
+-- 🔍 Tìm NPC hợp lệ toàn map Dungeon Quest (ưu tiên boss trước)
 local function getPriorityNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
 	local _, root = getHumanoidAndRoot(char)
 	if not root then return end
 
-	local targetBoss = nil
-	local targetNormal = nil
-	local farthestBossDist = 0
-	local farthestNormalDist = 0
+	-- Danh sách các folder NPC có thể xuất hiện trong mọi map
+	local possibleFolders = {
+		"Enemies",
+		"Mobs",
+		"Live",
+		"Boss",
+		"Bosses",
+		"Dungeon",
+		"Hostiles",
+		"Monsters",
+		"ActiveEnemies",
+		"ActiveBosses"
+	}
 
-	for _, v in ipairs(Workspace:GetDescendants()) do
+	-- Gom tất cả NPC từ các folder khả dụng
+	local allNPCs = {}
+	for _, name in ipairs(possibleFolders) do
+		local folder = Workspace:FindFirstChild(name)
+		if folder and folder:IsA("Folder") then
+			for _, v in ipairs(folder:GetDescendants()) do
+				if v:IsA("Model") then
+					table.insert(allNPCs, v)
+				end
+			end
+		elseif Workspace:FindFirstChild("Dungeon") and Workspace.Dungeon:FindFirstChild(name) then
+			local sub = Workspace.Dungeon[name]
+			for _, v in ipairs(sub:GetDescendants()) do
+				if v:IsA("Model") then
+					table.insert(allNPCs, v)
+				end
+			end
+		end
+	end
+
+	-- Nếu không tìm thấy NPC trong các folder trên → fallback toàn Workspace
+	if #allNPCs == 0 then
+		allNPCs = Workspace:GetDescendants()
+	end
+
+	local targetBoss, targetMini, targetNormal
+	local farthestBoss, farthestMini, farthestNormal = 0, 0, 0
+
+	for _, v in ipairs(allNPCs) do
 		if v:IsA("Model") and v ~= char and not isPlayerModel(v) then
 			local hum, hrp = getHumanoidAndRoot(v)
 			if hum and hrp and hum.Health > 0 and isNPCReady(v) then
 				local dist = (hrp.Position - root.Position).Magnitude
 				if dist < maxRange then
-					local lowerName = v.Name:lower()
-					if lowerName:find("boss") or lowerName:find("mini") then
-						-- Ưu tiên boss hoặc miniboss
-						if dist > farthestBossDist then
-							farthestBossDist = dist
+					local n = v.Name:lower()
+
+					-- Ưu tiên theo thứ tự: boss → mini → thường
+					if n:find("final") or n:find("boss") or n:find("guardian") or n:find("king") or n:find("demon") then
+						if dist > farthestBoss then
+							farthestBoss = dist
 							targetBoss = v
 						end
+					elseif n:find("mini") or n:find("elite") or n:find("champion") then
+						if dist > farthestMini then
+							farthestMini = dist
+							targetMini = v
+						end
 					else
-						if dist > farthestNormalDist then
-							farthestNormalDist = dist
+						if dist > farthestNormal then
+							farthestNormal = dist
 							targetNormal = v
 						end
 					end
@@ -433,7 +476,8 @@ local function getPriorityNPC()
 		end
 	end
 
-	return targetBoss or targetNormal
+	-- Ưu tiên Boss > MiniBoss > Quái thường
+	return targetBoss or targetMini or targetNormal
 end
 
 -- 🌀 Di chuyển đến sau boss và giữ yên một chỗ cố định, tránh spam tween & kick
