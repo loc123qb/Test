@@ -352,20 +352,22 @@ local LocalPlayer = Players.LocalPlayer
 local Workspace = game:GetService("Workspace")
 
 -- ⚙️ Cấu hình
-local tweenSpeed = 55 -- tốc độ di chuyển
-local hoverHeight = 0
-local teleportDistance = 8 -- khoảng cách phía sau quái
-local updateDelay = 1.25 -- thời gian delay giữa mỗi lần tìm NPC
+local tweenSpeed = 55 -- tốc độ tween
+local hoverHeight = 0 -- cao hơn mặt đất chút xíu
+local teleportDistance = 8 -- đứng sau lưng quái
+local updateDelay = 1.25 -- delay giữa mỗi lần di chuyển
 local maxRange = 4000
 
 _G.AutoTween = false
 
 -- 🧠 Hàm hỗ trợ
 local function getHumanoidAndRoot(model)
-	if not model then return end
+	if not model or not model:IsA("Model") then return end
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	local root = model:FindFirstChild("HumanoidRootPart")
-	return hum, root
+	if hum and root then
+		return hum, root
+	end
 end
 
 local function isPlayerModel(model)
@@ -377,7 +379,21 @@ local function isPlayerModel(model)
 	return false
 end
 
--- 🔍 Ưu tiên Boss trước, sau đó quái gần nhất
+-- 🧍 Kiểm tra NPC đã spawn hoàn chỉnh (đứng trên mặt đất, có HRP + Humanoid)
+local function isNPCReady(npc)
+	local hum, hrp = getHumanoidAndRoot(npc)
+	if not (hum and hrp) then return false end
+	if hum.Health <= 0 then return false end
+
+	-- Raycast để kiểm tra có mặt đất dưới chân
+	local ray = Ray.new(hrp.Position, Vector3.new(0, -10, 0))
+	local hit = Workspace:FindPartOnRay(ray, npc)
+	if not hit then return false end
+
+	return true
+end
+
+-- 🔍 Ưu tiên Boss trước, rồi đến quái gần nhất (có humanoid và root hợp lệ)
 local function getNearestNPC()
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -391,13 +407,13 @@ local function getNearestNPC()
 	for _, folder in ipairs(npcFolders) do
 		if folder then
 			for _, v in ipairs(folder:GetChildren()) do
-				if v:IsA("Model") and v ~= char then
+				if v:IsA("Model") and not isPlayerModel(v) and v ~= char then
 					local hum, hrp = getHumanoidAndRoot(v)
-					if hum and hrp and hum.Health > 0 and not isPlayerModel(v) then
+					if hum and hrp and hum.Health > 0 and isNPCReady(v) then
 						local dist = (hrp.Position - root.Position).Magnitude
 						if dist < maxRange then
-							local lowerName = v.Name:lower()
-							if lowerName:find("boss") or lowerName:find("king") or lowerName:find("beast") or lowerName:find("lord") then
+							local nameLower = v.Name:lower()
+							if nameLower:find("boss") or nameLower:find("king") or nameLower:find("beast") or nameLower:find("lord") then
 								if dist < shortestBoss then
 									shortestBoss = dist
 									nearestBoss = v
@@ -418,7 +434,7 @@ local function getNearestNPC()
 	return nearestBoss or nearestEnemy
 end
 
--- 🌀 Tween mượt đến sau NPC (chỉ 1 lần, không tween trái phải)
+-- 🌀 Tween cực mượt đến sau NPC
 local function tweenToTarget(target)
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -428,16 +444,17 @@ local function tweenToTarget(target)
 
 	local _, targetRoot = getHumanoidAndRoot(target)
 	if not targetRoot then return end
+	if not isNPCReady(target) then return end
 
-	-- Vị trí phía sau quái
+	-- Xác định vị trí phía sau lưng quái
 	local behindDir = -targetRoot.CFrame.LookVector
 	local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
 
-	-- Tạo tween di chuyển thật mượt
 	local dist = (root.Position - targetPos).Magnitude
 	local duration = dist / tweenSpeed
 	if duration < 0.1 then duration = 0.1 end
 
+	-- Tween đến vị trí phía sau
 	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
 	local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, targetRoot.Position) })
 	tween:Play()
@@ -450,10 +467,7 @@ task.spawn(function()
 		if _G.AutoTween then
 			local npc = getNearestNPC()
 			if npc then
-				local hum, hrp = getHumanoidAndRoot(npc)
-				if hum and hrp and hum.Health > 0 then
-					tweenToTarget(npc)
-				end
+				tweenToTarget(npc)
 			end
 		end
 	end
@@ -474,7 +488,7 @@ local ToggleFarm = Tab:CreateToggle({
 		if Value then
 			hum.PlatformStand = true
 			hum:ChangeState(Enum.HumanoidStateType.Physics)
-			warn("[AUTO-FARM] ✅ Đã bật: Di chuyển mượt phía sau quái (ưu tiên Boss).")
+			warn("[AUTO-FARM] ✅ Đã bật: Tween mượt phía sau quái (ưu tiên Boss, NPC sẵn sàng).")
 		else
 			hum.PlatformStand = false
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -482,6 +496,7 @@ local ToggleFarm = Tab:CreateToggle({
 		end
 	end
 })
+
 
 
 
