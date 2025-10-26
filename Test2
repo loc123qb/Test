@@ -423,40 +423,52 @@ local function getFarthestNPC()
 	return farthest
 end
 
--- 🌀 Di chuyển mượt quanh NPC theo hình tròn
+-- 🌀 Di chuyển đến sau boss và giữ yên một chỗ cố định
 local function tweenTo(target)
-	local char = LocalPlayer.Character
-	if not char then return end
-	local hum, root = getHumanoidAndRoot(char)
-	if not root then return end
-	if not target then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum, root = getHumanoidAndRoot(char)
+    if not root then return end
+    if not target then return end
 
-	local _, targetRoot = getHumanoidAndRoot(target)
-	if not targetRoot then return end
-	if not isNPCReady(target) then return end -- chỉ di chuyển khi NPC đã spawn và còn sống
+    local _, targetRoot = getHumanoidAndRoot(target)
+    if not targetRoot then return end
+    if not isNPCReady(target) then return end
 
-	task.wait(teleportDelay)
+    -- đợi boss spawn ổn định
+    task.wait(teleportDelay)
 
-	local behindDir = -targetRoot.CFrame.LookVector
-	local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
-	root.CFrame = CFrame.new(targetPos)
+    -- di chuyển đến vị trí sau boss
+    local behindDir = -targetRoot.CFrame.LookVector
+    local targetPos = targetRoot.Position + behindDir * teleportDistance + Vector3.new(0, hoverHeight, 0)
 
-	local angleStep = math.rad(10)
-	local totalSteps = math.floor(360 / 10)
-	for i = 1, totalSteps do
-		if not _G.AutoTween then break end
-		if not isNPCReady(target) then break end -- dừng nếu NPC chết giữa chừng
-		local angle = math.rad(i * 10)
-		local offsetX = math.cos(angle) * orbitRadius
-		local offsetZ = math.sin(angle) * orbitRadius
-		local newPos = targetRoot.Position + Vector3.new(offsetX, hoverHeight, offsetZ)
-		local duration = orbitDuration / totalSteps
-		local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-		local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(newPos) })
-		tween:Play()
-		tween.Completed:Wait()
-	end
+    local tweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local tween = TweenService:Create(root, tweenInfo, { CFrame = CFrame.new(targetPos, targetRoot.Position) })
+    tween:Play()
+    tween.Completed:Wait()
+
+    -- Giữ cố định vị trí phía sau boss, tránh bị rơi hoặc trượt
+    task.spawn(function()
+        while _G.AutoTween and target and isNPCReady(target) do
+            local _, tRoot = getHumanoidAndRoot(target)
+            if not tRoot then break end
+
+            -- cập nhật vị trí theo hướng nhìn của boss (luôn phía sau)
+            local behind = -tRoot.CFrame.LookVector
+            local stayPos = tRoot.Position + behind * teleportDistance + Vector3.new(0, hoverHeight, 0)
+            root.CFrame = CFrame.new(stayPos, tRoot.Position)
+
+            -- chống rơi và nghiêng người
+            if hum and hum.Health > 0 then
+                hum.PlatformStand = true
+                hum:ChangeState(Enum.HumanoidStateType.Physics)
+            end
+
+            task.wait(0.15)
+        end
+    end)
 end
+
 
 -- ⚡ Auto Dodge Zone (né vùng đỏ AOE)
 local lastDodge = 0
